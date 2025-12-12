@@ -37,7 +37,10 @@ func init() {
 }
 
 func initConfig() {
-	// Use ExperimentalBindStruct to automatically bind struct tags to env vars
+	// ExperimentalBindStruct enables automatic binding of struct tags to env vars.
+	// WARNING: This is an experimental Viper API that may change in future versions.
+	// If Viper removes or changes this API, replace with explicit viper.BindEnv() calls.
+	// See: https://github.com/spf13/viper#working-with-environment-variables
 	viper.SetOptions(viper.ExperimentalBindStruct())
 	viper.SetEnvPrefix("PATROL")
 	viper.AutomaticEnv()

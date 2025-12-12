@@ -4,20 +4,41 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"time"
 
 	jira "github.com/andygrunwald/go-jira/v2/cloud"
 	"github.com/sentiolabs/patrol/internal/config"
-	"github.com/sentiolabs/patrol/internal/provider"
+	"github.com/sentiolabs/patrol/internal/vuln"
 )
 
 // Client wraps the Jira API client
 type Client struct {
-	client    *jira.Client
-	boardID   int
-	boardName string
-	verbose   bool
+	client  *jira.Client
+	verbose bool
+}
+
+// escapeJQL escapes special characters in JQL query strings to prevent injection
+func escapeJQL(s string) string {
+	// JQL requires escaping of special characters: \ " '
+	// Order matters: escape backslash first
+	replacer := strings.NewReplacer(
+		`\`, `\\`,
+		`"`, `\"`,
+		`'`, `\'`,
+	)
+	return replacer.Replace(s)
+}
+
+// providerToLabel maps internal provider names to Jira label names
+func providerToLabel(provider string) string {
+	switch provider {
+	case "github":
+		return "patrol:dependabot"
+	default:
+		return "patrol:" + provider
+	}
 }
 
 // TicketInfo holds information about an existing Jira ticket
@@ -56,11 +77,14 @@ func (c *Client) FindExistingTicket(ctx context.Context, project, vulnID, cve st
 
 	jqlParts = append(jqlParts, fmt.Sprintf("project = %s", project))
 	jqlParts = append(jqlParts, "statusCategory != Done") // Only find tickets not in Done category
+	jqlParts = append(jqlParts, "labels = patrol")        // Only match patrol-created tickets
 
 	if cve != "" {
-		jqlParts = append(jqlParts, fmt.Sprintf("(summary ~ \"%s\" OR description ~ \"%s\")", cve, cve))
+		escaped := escapeJQL(cve)
+		jqlParts = append(jqlParts, fmt.Sprintf("(summary ~ \"%s\" OR description ~ \"%s\")", escaped, escaped))
 	} else if vulnID != "" {
-		jqlParts = append(jqlParts, fmt.Sprintf("(summary ~ \"%s\" OR description ~ \"%s\")", vulnID, vulnID))
+		escaped := escapeJQL(vulnID)
+		jqlParts = append(jqlParts, fmt.Sprintf("(summary ~ \"%s\" OR description ~ \"%s\")", escaped, escaped))
 	} else {
 		return nil, nil
 	}
@@ -68,7 +92,7 @@ func (c *Client) FindExistingTicket(ctx context.Context, project, vulnID, cve st
 	jql := strings.Join(jqlParts, " AND ")
 
 	if c.verbose {
-		fmt.Printf("Searching for existing tickets with JQL: %s\n", jql)
+		slog.Debug("searching for existing tickets", "jql", jql)
 	}
 
 	// Use the new SearchV2JQL method (uses /rest/api/2/search/jql endpoint)
@@ -81,7 +105,7 @@ func (c *Client) FindExistingTicket(ctx context.Context, project, vulnID, cve st
 	}
 
 	if c.verbose {
-		fmt.Printf("Found %d matching tickets\n", len(issues))
+		slog.Debug("found matching tickets", "count", len(issues))
 	}
 
 	if len(issues) > 0 {
@@ -106,8 +130,41 @@ func (c *Client) FindExistingTicket(ctx context.Context, project, vulnID, cve st
 	return nil, nil
 }
 
-// AddDuplicateComment adds a comment to an existing ticket about a duplicate occurrence
-func (c *Client) AddDuplicateComment(ctx context.Context, ticketInfo *TicketInfo, v provider.Vulnerability) error {
+// GetLastPatrolComment returns the timestamp of the last patrol comment on an issue
+func (c *Client) GetLastPatrolComment(ctx context.Context, issueKey string) (time.Time, error) {
+	// Get issue with comments expanded
+	issue, _, err := c.client.Issue.Get(ctx, issueKey, &jira.GetQueryOptions{
+		Fields: "comment",
+	})
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to get issue comments: %w", err)
+	}
+
+	if issue == nil || issue.Fields == nil || issue.Fields.Comments == nil {
+		return time.Time{}, nil
+	}
+
+	// Find the most recent patrol comment (iterate in reverse for most recent)
+	comments := issue.Fields.Comments.Comments
+	for i := len(comments) - 1; i >= 0; i-- {
+		if strings.HasPrefix(comments[i].Body, "[patrol]") {
+			// Parse the created timestamp - Jira uses format like "2024-01-15T10:30:00.000+0000"
+			created, err := parseJiraTimestamp(comments[i].Created)
+			if err != nil {
+				if c.verbose {
+					slog.Warn("failed to parse comment timestamp", "timestamp", comments[i].Created, "error", err)
+				}
+				continue // Skip if we can't parse
+			}
+			return created, nil
+		}
+	}
+
+	return time.Time{}, nil
+}
+
+// AddMergedComment adds a comment to an existing ticket with merged vulnerability info
+func (c *Client) AddMergedComment(ctx context.Context, ticketInfo *TicketInfo, v vuln.MergedVulnerability) error {
 	// Calculate days since ticket was created
 	daysOpen := int(time.Since(ticketInfo.Created).Hours() / 24)
 
@@ -129,18 +186,25 @@ func (c *Client) AddDuplicateComment(ctx context.Context, ticketInfo *TicketInfo
 		urlStr = fmt.Sprintf("\n\nDetails: %s", v.URL)
 	}
 
-	comment := fmt.Sprintf(`Vulnerability still detected
+	// Build repositories list
+	reposStr := strings.Join(v.Repositories, "\n- ")
+
+	comment := fmt.Sprintf(`[patrol] Vulnerability still detected
 
 This vulnerability was first reported %d days ago and the ticket is currently %s.
 
+Detected by: %s
+Affected repositories:
+- %s
+
 Current detection:
-- Repository: %s
 - Package: %s@%s
 - Severity: %s%s
 - Fix available: %s%s`,
 		daysOpen,
 		ticketInfo.Status,
-		v.Repository,
+		v.ProvidersString(),
+		reposStr,
 		v.Package,
 		v.Version,
 		v.Severity,
@@ -159,16 +223,17 @@ Current detection:
 	return nil
 }
 
-// CreateTicket creates a new Jira ticket for a vulnerability
-func (c *Client) CreateTicket(ctx context.Context, jiraCfg config.JiraConfig, v provider.Vulnerability, priority string, addToSprint bool) (string, error) {
+// CreateMergedTicket creates a new Jira ticket for a merged vulnerability
+func (c *Client) CreateMergedTicket(ctx context.Context, jiraCfg config.JiraConfig, v vuln.MergedVulnerability, priority string, addToSprint bool) (string, error) {
 	// Build summary
-	summary := fmt.Sprintf("[%s] %s in %s", v.Severity, v.CVE, v.Package)
-	if v.CVE == "" {
-		summary = fmt.Sprintf("[%s] %s in %s", v.Severity, v.ID, v.Package)
+	displayID := v.CVE
+	if displayID == "" {
+		displayID = v.ID
 	}
+	summary := fmt.Sprintf("[%s] %s in %s", v.Severity, displayID, v.Package)
 
 	// Build description
-	description := buildDescription(v)
+	description := buildMergedDescription(v)
 
 	// Build issue fields
 	fields := &jira.IssueFields{
@@ -192,9 +257,19 @@ func (c *Client) CreateTicket(ctx context.Context, jiraCfg config.JiraConfig, v 
 		}
 	}
 
-	// Set labels
+	// Set labels (include patrol label and provider labels for tracking)
+	labels := []string{"patrol"}
+	for _, p := range v.Providers {
+		labels = append(labels, providerToLabel(p))
+	}
+	// Add severity label
+	if v.Severity != "" {
+		labels = append(labels, "patrol:"+v.Severity)
+	}
 	if len(jiraCfg.Labels) > 0 {
-		fields.Labels = jiraCfg.Labels
+		fields.Labels = append(jiraCfg.Labels, labels...)
+	} else {
+		fields.Labels = labels
 	}
 
 	// Set components
@@ -226,7 +301,7 @@ func (c *Client) CreateTicket(ctx context.Context, jiraCfg config.JiraConfig, v 
 	if addToSprint && (jiraCfg.BoardID > 0 || jiraCfg.BoardName != "") {
 		if err := c.addToActiveSprint(ctx, jiraCfg.BoardID, jiraCfg.BoardName, created.Key); err != nil {
 			// Log but don't fail - the ticket was still created
-			fmt.Printf("Warning: failed to add %s to sprint: %v\n", created.Key, err)
+			slog.Warn("failed to add ticket to sprint", "key", created.Key, "error", err)
 		}
 	}
 
@@ -283,7 +358,7 @@ func (c *Client) addToActiveSprint(ctx context.Context, boardID int, boardName s
 	sprintName := sprints.Values[0].Name
 
 	if c.verbose {
-		fmt.Printf("Adding %s to sprint %q (ID: %d)\n", issueKey, sprintName, activeSprintID)
+		slog.Debug("adding ticket to sprint", "key", issueKey, "sprint", sprintName, "sprintID", activeSprintID)
 	}
 
 	// Move issue to sprint
@@ -295,10 +370,33 @@ func (c *Client) addToActiveSprint(ctx context.Context, boardID int, boardName s
 	return nil
 }
 
-func buildDescription(v provider.Vulnerability) string {
+// parseJiraTimestamp parses Jira's various timestamp formats
+func parseJiraTimestamp(ts string) (time.Time, error) {
+	// Jira uses formats like:
+	// - "2024-01-15T10:30:00.000+0000" (no colon in timezone)
+	// - "2024-01-15T10:30:00.000-0700" (with colon in timezone)
+	// - "2024-01-15T10:30:00.000Z"     (UTC)
+	formats := []string{
+		"2006-01-02T15:04:05.000-0700",  // with colon
+		"2006-01-02T15:04:05.000Z0700",  // without colon
+		"2006-01-02T15:04:05.000Z",      // UTC
+		time.RFC3339,                    // standard
+		time.RFC3339Nano,                // with nanos
+	}
+
+	for _, format := range formats {
+		if t, err := time.Parse(format, ts); err == nil {
+			return t, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("unable to parse timestamp: %s", ts)
+}
+
+func buildMergedDescription(v vuln.MergedVulnerability) string {
 	var parts []string
 
-	parts = append(parts, fmt.Sprintf("*Vulnerability Details*"))
+	parts = append(parts, "*Vulnerability Details*")
 	parts = append(parts, "")
 
 	if v.CVE != "" {
@@ -321,8 +419,8 @@ func buildDescription(v provider.Vulnerability) string {
 	}
 
 	parts = append(parts, "")
-	parts = append(parts, fmt.Sprintf("*Repository:* %s", v.Repository))
-	parts = append(parts, fmt.Sprintf("*Provider:* %s", v.Provider))
+	parts = append(parts, fmt.Sprintf("*Detected by:* %s", v.ProvidersString()))
+	parts = append(parts, fmt.Sprintf("*Affected repositories:* %s", v.RepositoriesString()))
 	parts = append(parts, fmt.Sprintf("*Discovered:* %s", v.DiscoveredAt.Format(time.RFC3339)))
 
 	if v.Description != "" {

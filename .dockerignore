@@ -1,0 +1,25 @@
+# Binary
+patrol
+
+# Git
+.git
+.gitignore
+
+# Environment and local config
+.env
+.env.*
+.patrol.yaml
+
+# IDE
+.idea/
+.vscode/
+.claude/
+
+# Documentation
+README.md
+LICENSE
+*.md
+
+# Docker
+Dockerfile
+.dockerignore

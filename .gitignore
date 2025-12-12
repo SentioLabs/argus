@@ -2,8 +2,8 @@
 patrol
 
 # Environment files (contain secrets)
-.env
-.env.*
+#.env
+#.env.*
 
 # Go build artifacts
 *.exe

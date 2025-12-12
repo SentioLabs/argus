@@ -1,13 +1,21 @@
 package filter
 
 import (
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/sentiolabs/patrol/internal/config"
-	"github.com/sentiolabs/patrol/internal/provider"
 )
+
+// Filterable defines the interface for vulnerability filtering
+type Filterable interface {
+	GetSeverity() string
+	GetCVSS() float64
+	GetDiscoveredAt() time.Time
+	GetPackage() string
+}
 
 // Filter applies configured filters to vulnerabilities
 type Filter struct {
@@ -19,19 +27,8 @@ func New(cfg config.FiltersConfig) *Filter {
 	return &Filter{cfg: cfg}
 }
 
-// Apply filters a slice of vulnerabilities based on configured criteria
-func (f *Filter) Apply(vulns []provider.Vulnerability) []provider.Vulnerability {
-	var filtered []provider.Vulnerability
-	for _, v := range vulns {
-		if f.ShouldInclude(v) {
-			filtered = append(filtered, v)
-		}
-	}
-	return filtered
-}
-
 // ShouldInclude checks if a single vulnerability passes all filters
-func (f *Filter) ShouldInclude(v provider.Vulnerability) bool {
+func (f *Filter) ShouldInclude(v Filterable) bool {
 	if !f.checkSeverity(v) {
 		return false
 	}
@@ -51,41 +48,41 @@ func (f *Filter) ShouldInclude(v provider.Vulnerability) bool {
 }
 
 // checkSeverity verifies the vulnerability meets minimum severity
-func (f *Filter) checkSeverity(v provider.Vulnerability) bool {
+func (f *Filter) checkSeverity(v Filterable) bool {
 	minSeverity := strings.ToLower(f.cfg.MinSeverity)
 	if minSeverity == "" {
 		return true
 	}
 
 	minLevel := config.SeverityOrder[minSeverity]
-	vulnLevel := config.SeverityOrder[strings.ToLower(v.Severity)]
+	vulnLevel := config.SeverityOrder[strings.ToLower(v.GetSeverity())]
 	return vulnLevel >= minLevel
 }
 
 // checkCVSS verifies the vulnerability meets minimum CVSS score
-func (f *Filter) checkCVSS(v provider.Vulnerability) bool {
+func (f *Filter) checkCVSS(v Filterable) bool {
 	if f.cfg.CVSSMin <= 0 {
 		return true
 	}
-	return v.CVSS >= f.cfg.CVSSMin
+	return v.GetCVSS() >= f.cfg.CVSSMin
 }
 
 // checkAge verifies the vulnerability is within the max age
-func (f *Filter) checkAge(v provider.Vulnerability) bool {
+func (f *Filter) checkAge(v Filterable) bool {
 	if f.cfg.MaxAgeDays <= 0 {
 		return true
 	}
 	maxAge := time.Duration(f.cfg.MaxAgeDays) * 24 * time.Hour
-	return time.Since(v.DiscoveredAt) <= maxAge
+	return time.Since(v.GetDiscoveredAt()) <= maxAge
 }
 
 // checkPackageInclude verifies the vulnerability's package matches include patterns
-func (f *Filter) checkPackageInclude(v provider.Vulnerability) bool {
+func (f *Filter) checkPackageInclude(v Filterable) bool {
 	if len(f.cfg.Packages) == 0 {
 		return true
 	}
 	for _, pkg := range f.cfg.Packages {
-		if MatchPattern(pkg, v.Package) {
+		if MatchPattern(pkg, v.GetPackage()) {
 			return true
 		}
 	}
@@ -93,9 +90,9 @@ func (f *Filter) checkPackageInclude(v provider.Vulnerability) bool {
 }
 
 // checkPackageExclude verifies the vulnerability's package doesn't match exclude patterns
-func (f *Filter) checkPackageExclude(v provider.Vulnerability) bool {
+func (f *Filter) checkPackageExclude(v Filterable) bool {
 	for _, pkg := range f.cfg.ExcludePackages {
-		if MatchPattern(pkg, v.Package) {
+		if MatchPattern(pkg, v.GetPackage()) {
 			return false
 		}
 	}
@@ -105,7 +102,11 @@ func (f *Filter) checkPackageExclude(v provider.Vulnerability) bool {
 // MatchPattern checks if a string matches a glob-like pattern
 func MatchPattern(pattern, s string) bool {
 	// Handle case-insensitive matching
-	matched, _ := filepath.Match(strings.ToLower(pattern), strings.ToLower(s))
+	matched, err := filepath.Match(strings.ToLower(pattern), strings.ToLower(s))
+	if err != nil {
+		slog.Warn("invalid glob pattern", "pattern", pattern, "error", err)
+		return false
+	}
 	return matched
 }
 

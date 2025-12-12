@@ -4,47 +4,55 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"path/filepath"
+	"net/http"
 	"strings"
-	"time"
 
 	"github.com/google/go-github/v57/github"
 	"github.com/sentiolabs/patrol/internal/config"
+	"github.com/sentiolabs/patrol/internal/filter"
 	"golang.org/x/oauth2"
 )
 
+
 // GitHubProvider fetches Dependabot alerts from GitHub
 type GitHubProvider struct {
-	client       *github.Client
-	orgs         []string
-	repos        []string
-	repoPatterns []string
-	excludeRepos []string
-	filters      config.FiltersConfig
-	verbose      bool
+	client           *github.Client
+	orgs             []string
+	repos            []string
+	repoPatterns     []string
+	excludeRepos     []string
+	filter           *filter.Filter
+	severityMappings map[string]string
+	verbose          bool
 }
 
 // NewGitHubProvider creates a new GitHub Dependabot provider
-func NewGitHubProvider(token string, cfg config.ProviderConfig, filters config.FiltersConfig, verbose bool) (*GitHubProvider, error) {
+func NewGitHubProvider(token string, cfg config.ProviderConfig, filters config.FiltersConfig, severityMappings map[string]string, verbose bool) (*GitHubProvider, error) {
 	if token == "" {
 		return nil, fmt.Errorf("PATROL_GITHUB_TOKEN environment variable is required")
 	}
 
-	ctx := context.Background()
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
 	)
-	tc := oauth2.NewClient(ctx, ts)
-	client := github.NewClient(tc)
+	// Create HTTP client with timeout, then wrap with oauth2 transport
+	httpClient := &http.Client{
+		Timeout: HTTPTimeout,
+		Transport: &oauth2.Transport{
+			Source: ts,
+		},
+	}
+	client := github.NewClient(httpClient)
 
 	return &GitHubProvider{
-		client:       client,
-		orgs:         cfg.Orgs,
-		repos:        cfg.Repos,
-		repoPatterns: cfg.RepoPatterns,
-		excludeRepos: cfg.ExcludeRepos,
-		filters:      filters,
-		verbose:      verbose,
+		client:           client,
+		orgs:             cfg.Orgs,
+		repos:            cfg.Repos,
+		repoPatterns:     cfg.RepoPatterns,
+		excludeRepos:     cfg.ExcludeRepos,
+		filter:           filter.New(filters),
+		severityMappings: severityMappings,
+		verbose:          verbose,
 	}, nil
 }
 
@@ -84,7 +92,7 @@ func (p *GitHubProvider) FetchVulnerabilities(ctx context.Context) ([]Vulnerabil
 
 		for _, alert := range alerts {
 			v := p.alertToVulnerability(repo, alert)
-			if p.shouldInclude(v) {
+			if p.filter.ShouldInclude(v) {
 				vulns = append(vulns, v)
 			}
 		}
@@ -140,7 +148,7 @@ func (p *GitHubProvider) getRepositories(ctx context.Context) ([]string, error) 
 func (p *GitHubProvider) getOrgRepositories(ctx context.Context, org string) ([]string, error) {
 	var allRepos []string
 	opts := &github.RepositoryListByOrgOptions{
-		ListOptions: github.ListOptions{PerPage: 100},
+		ListOptions: github.ListOptions{PerPage: APIPageSize},
 	}
 
 	for {
@@ -176,7 +184,7 @@ func (p *GitHubProvider) getAlertsForRepo(ctx context.Context, repo string) ([]*
 	var allAlerts []*github.DependabotAlert
 	opts := &github.ListAlertsOptions{
 		State: github.String("open"),
-		ListOptions: github.ListOptions{PerPage: 100},
+		ListOptions: github.ListOptions{PerPage: APIPageSize},
 	}
 
 	for {
@@ -225,8 +233,8 @@ func (p *GitHubProvider) alertToVulnerability(repo string, alert *github.Dependa
 		// Get CVE if available
 		v.CVE = adv.GetCVEID()
 
-		// Get severity
-		v.Severity = strings.ToLower(adv.GetSeverity())
+		// Get severity and normalize (e.g., "moderate" → "medium")
+		v.Severity = NormalizeSeverity(adv.GetSeverity(), p.severityMappings)
 
 		// Get CVSS score
 		if adv.CVSS != nil && adv.CVSS.Score != nil {
@@ -239,7 +247,9 @@ func (p *GitHubProvider) alertToVulnerability(repo string, alert *github.Dependa
 		if alert.Dependency.Package != nil {
 			v.Package = alert.Dependency.Package.GetName()
 		}
-		v.Version = alert.Dependency.GetManifestPath()
+		// Note: Dependabot API doesn't expose the installed version directly.
+		// ManifestPath is the file path (e.g., "package.json"), not a version.
+		// Version is left empty; the vulnerable range is in SecurityVulnerability.
 	}
 
 	// Get fixed version from security vulnerability
@@ -257,55 +267,6 @@ func (p *GitHubProvider) alertToVulnerability(repo string, alert *github.Dependa
 	return v
 }
 
-// shouldInclude checks if a vulnerability passes the configured filters
-func (p *GitHubProvider) shouldInclude(v Vulnerability) bool {
-	// Check severity filter
-	minSeverity := strings.ToLower(p.filters.MinSeverity)
-	if minSeverity != "" {
-		minLevel := config.SeverityOrder[minSeverity]
-		vulnLevel := config.SeverityOrder[strings.ToLower(v.Severity)]
-		if vulnLevel < minLevel {
-			return false
-		}
-	}
-
-	// Check CVSS filter
-	if p.filters.CVSSMin > 0 && v.CVSS < p.filters.CVSSMin {
-		return false
-	}
-
-	// Check age filter
-	if p.filters.MaxAgeDays > 0 {
-		maxAge := time.Duration(p.filters.MaxAgeDays) * 24 * time.Hour
-		if time.Since(v.DiscoveredAt) > maxAge {
-			return false
-		}
-	}
-
-	// Check package filters
-	if len(p.filters.Packages) > 0 {
-		matched := false
-		for _, pkg := range p.filters.Packages {
-			if matchPattern(pkg, v.Package) {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return false
-		}
-	}
-
-	// Check exclude packages
-	for _, pkg := range p.filters.ExcludePackages {
-		if matchPattern(pkg, v.Package) {
-			return false
-		}
-	}
-
-	return true
-}
-
 // isExcluded checks if a repo is in the exclusion list
 func (p *GitHubProvider) isExcluded(repo string) bool {
 	for _, excluded := range p.excludeRepos {
@@ -319,15 +280,9 @@ func (p *GitHubProvider) isExcluded(repo string) bool {
 // matchesPattern checks if a repo matches any of the configured patterns
 func (p *GitHubProvider) matchesPattern(repo string) bool {
 	for _, pattern := range p.repoPatterns {
-		if matchPattern(pattern, repo) {
+		if filter.MatchPattern(pattern, repo) {
 			return true
 		}
 	}
 	return false
-}
-
-// matchPattern checks if a string matches a glob-like pattern
-func matchPattern(pattern, s string) bool {
-	matched, _ := filepath.Match(pattern, s)
-	return matched
 }

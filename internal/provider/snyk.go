@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sentiolabs/patrol/internal/config"
+	"github.com/sentiolabs/patrol/internal/filter"
 )
 
 const (
@@ -18,20 +19,23 @@ const (
 	snykRESTBaseURL = "https://api.snyk.io/rest"
 	// v1 API base URL (still used for issues endpoint)
 	snykV1BaseURL = "https://api.snyk.io/v1"
-	// API version for REST endpoints (latest stable)
-	snykAPIVersion = "2025-11-05"
+	// defaultSnykAPIVersion is the default API version for REST endpoints
+	// See https://docs.snyk.io/snyk-api/rest-api for available versions
+	defaultSnykAPIVersion = "2025-11-05"
 )
 
 // SnykProvider fetches vulnerabilities from Snyk
 type SnykProvider struct {
-	client          *http.Client
-	token           string
-	orgID           string
-	projectIDs      []string
-	projectPatterns []string
-	excludeProjects []string
-	filters         config.FiltersConfig
-	verbose         bool
+	client           *http.Client
+	token            string
+	orgID            string
+	apiVersion       string
+	projectIDs       []string
+	projectPatterns  []string
+	excludeProjects  []string
+	filter           *filter.Filter
+	severityMappings map[string]string
+	verbose          bool
 }
 
 // REST API response for projects (JSON:API format)
@@ -65,14 +69,15 @@ type snykIssuesResponse struct {
 }
 
 type snykIssue struct {
-	ID           string          `json:"id"`
-	IssueType    string          `json:"issueType"`
-	PkgName      string          `json:"pkgName"`
-	PkgVersion   string          `json:"pkgVersion"`
-	IssueData    snykIssueData   `json:"issueData"`
-	IsPatched    bool            `json:"isPatched"`
-	IsIgnored    bool            `json:"isIgnored"`
-	IntroducedAt time.Time       `json:"introducedThrough"`
+	ID         string        `json:"id"`
+	IssueType  string        `json:"issueType"`
+	PkgName    string        `json:"pkgName"`
+	PkgVersion string        `json:"pkgVersion"`
+	IssueData  snykIssueData `json:"issueData"`
+	IsPatched  bool          `json:"isPatched"`
+	IsIgnored  bool          `json:"isIgnored"`
+	// Note: introducedThrough is an array (dependency path), not a timestamp.
+	// We don't parse it; DiscoveredAt defaults to time.Now() in issueToVulnerability.
 }
 
 type snykIssueData struct {
@@ -99,7 +104,7 @@ type snykProject struct {
 }
 
 // NewSnykProvider creates a new Snyk provider
-func NewSnykProvider(token string, cfg config.ProviderConfig, filters config.FiltersConfig, verbose bool) (*SnykProvider, error) {
+func NewSnykProvider(token string, cfg config.ProviderConfig, filters config.FiltersConfig, severityMappings map[string]string, verbose bool) (*SnykProvider, error) {
 	if token == "" {
 		return nil, fmt.Errorf("PATROL_SNYK_TOKEN environment variable is required")
 	}
@@ -108,15 +113,23 @@ func NewSnykProvider(token string, cfg config.ProviderConfig, filters config.Fil
 		return nil, fmt.Errorf("Snyk org_id is required in config")
 	}
 
+	// Use configured API version or fall back to default
+	apiVersion := cfg.APIVersion
+	if apiVersion == "" {
+		apiVersion = defaultSnykAPIVersion
+	}
+
 	return &SnykProvider{
-		client:          &http.Client{Timeout: 30 * time.Second},
-		token:           token,
-		orgID:           cfg.OrgID,
-		projectIDs:      cfg.ProjectIDs,
-		projectPatterns: cfg.ProjectPatterns,
-		excludeProjects: cfg.ExcludeProjects,
-		filters:         filters,
-		verbose:         verbose,
+		client:           &http.Client{Timeout: HTTPTimeout},
+		token:            token,
+		orgID:            cfg.OrgID,
+		apiVersion:       apiVersion,
+		projectIDs:       cfg.ProjectIDs,
+		projectPatterns:  cfg.ProjectPatterns,
+		excludeProjects:  cfg.ExcludeProjects,
+		filter:           filter.New(filters),
+		severityMappings: severityMappings,
+		verbose:          verbose,
 	}, nil
 }
 
@@ -156,7 +169,7 @@ func (p *SnykProvider) FetchVulnerabilities(ctx context.Context) ([]Vulnerabilit
 
 		for _, issue := range issues {
 			v := p.issueToVulnerability(project, issue)
-			if p.shouldInclude(v) {
+			if p.filter.ShouldInclude(v) {
 				vulns = append(vulns, v)
 			}
 		}
@@ -177,7 +190,7 @@ func (p *SnykProvider) getProjects(ctx context.Context) ([]snykProject, error) {
 	}
 
 	// Use REST API to get all projects in the org
-	url := fmt.Sprintf("%s/orgs/%s/projects?version=%s&limit=100", snykRESTBaseURL, p.orgID, snykAPIVersion)
+	url := fmt.Sprintf("%s/orgs/%s/projects?version=%s&limit=%d", snykRESTBaseURL, p.orgID, p.apiVersion, APIPageSize)
 
 	if p.verbose {
 		slog.Info("fetching projects from Snyk REST API", "url", url)
@@ -198,9 +211,12 @@ func (p *SnykProvider) getProjects(ctx context.Context) ([]snykProject, error) {
 		if err != nil {
 			return nil, err
 		}
+		defer resp.Body.Close()
 
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body: %w", err)
+		}
 
 		if resp.StatusCode != http.StatusOK {
 			if p.verbose {
@@ -214,10 +230,10 @@ func (p *SnykProvider) getProjects(ctx context.Context) ([]snykProject, error) {
 			return nil, fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		for _, p := range projectsResp.Data {
+		for _, proj := range projectsResp.Data {
 			allProjects = append(allProjects, snykProject{
-				ID:   p.ID,
-				Name: p.Attributes.Name,
+				ID:   proj.ID,
+				Name: proj.Attributes.Name,
 			})
 		}
 
@@ -281,7 +297,10 @@ func (p *SnykProvider) getIssuesForProject(ctx context.Context, projectID string
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		if p.verbose {
@@ -309,16 +328,18 @@ func (p *SnykProvider) getIssuesForProject(ctx context.Context, projectID string
 // issueToVulnerability converts a Snyk issue to our common Vulnerability model
 func (p *SnykProvider) issueToVulnerability(project snykProject, issue snykIssue) Vulnerability {
 	v := Vulnerability{
-		ID:           issue.IssueData.ID,
-		Severity:     strings.ToLower(issue.IssueData.Severity),
-		Package:      issue.PkgName,
-		Version:      issue.PkgVersion,
-		Repository:   project.Name,
-		Description:  issue.IssueData.Title,
-		URL:          issue.IssueData.URL,
-		CVSS:         issue.IssueData.CVSSScore,
-		Provider:     "snyk",
-		DiscoveredAt: issue.IntroducedAt,
+		ID:          issue.IssueData.ID,
+		Severity:    NormalizeSeverity(issue.IssueData.Severity, p.severityMappings),
+		Package:     issue.PkgName,
+		Version:     issue.PkgVersion,
+		Repository:  project.Name,
+		Description: issue.IssueData.Title,
+		URL:         issue.IssueData.URL,
+		CVSS:        issue.IssueData.CVSSScore,
+		Provider:    "snyk",
+		// Note: Snyk v1 API doesn't provide a discovery timestamp.
+		// DiscoveredAt will be set to time.Now() below.
+		DiscoveredAt: time.Now(),
 	}
 
 	// Get CVE if available
@@ -331,61 +352,7 @@ func (p *SnykProvider) issueToVulnerability(project snykProject, issue snykIssue
 		v.FixedVersion = issue.IssueData.FixedIn[0]
 	}
 
-	// Use current time if introduced time is zero
-	if v.DiscoveredAt.IsZero() {
-		v.DiscoveredAt = time.Now()
-	}
-
 	return v
-}
-
-// shouldInclude checks if a vulnerability passes the configured filters
-func (p *SnykProvider) shouldInclude(v Vulnerability) bool {
-	// Check severity filter
-	minSeverity := strings.ToLower(p.filters.MinSeverity)
-	if minSeverity != "" {
-		minLevel := config.SeverityOrder[minSeverity]
-		vulnLevel := config.SeverityOrder[strings.ToLower(v.Severity)]
-		if vulnLevel < minLevel {
-			return false
-		}
-	}
-
-	// Check CVSS filter
-	if p.filters.CVSSMin > 0 && v.CVSS < p.filters.CVSSMin {
-		return false
-	}
-
-	// Check age filter
-	if p.filters.MaxAgeDays > 0 {
-		maxAge := time.Duration(p.filters.MaxAgeDays) * 24 * time.Hour
-		if time.Since(v.DiscoveredAt) > maxAge {
-			return false
-		}
-	}
-
-	// Check package filters
-	if len(p.filters.Packages) > 0 {
-		matched := false
-		for _, pkg := range p.filters.Packages {
-			if matchPattern(pkg, v.Package) {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return false
-		}
-	}
-
-	// Check exclude packages
-	for _, pkg := range p.filters.ExcludePackages {
-		if matchPattern(pkg, v.Package) {
-			return false
-		}
-	}
-
-	return true
 }
 
 // isProjectExcluded checks if a project name is in the exclusion list
@@ -401,7 +368,7 @@ func (p *SnykProvider) isProjectExcluded(projectName string) bool {
 // matchesProjectPattern checks if a project name matches any of the configured patterns
 func (p *SnykProvider) matchesProjectPattern(projectName string) bool {
 	for _, pattern := range p.projectPatterns {
-		if matchPattern(pattern, projectName) {
+		if filter.MatchPattern(pattern, projectName) {
 			return true
 		}
 	}

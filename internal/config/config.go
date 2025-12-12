@@ -7,12 +7,11 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Severity levels in order from lowest to highest
-// Note: GitHub uses "moderate" instead of "medium"
+// SeverityOrder defines Patrol's canonical severity levels from lowest to highest.
+// Provider-specific values (e.g., GitHub's "moderate") are normalized via SeverityMappings.
 var SeverityOrder = map[string]int{
 	"low":      1,
 	"medium":   2,
-	"moderate": 2, // GitHub's term for medium
 	"high":     3,
 	"critical": 4,
 }
@@ -33,9 +32,10 @@ type Config struct {
 
 // DefaultsConfig contains base configuration inherited by all providers
 type DefaultsConfig struct {
-	Jira       JiraConfig       `mapstructure:"jira"`
-	Thresholds ThresholdsConfig `mapstructure:"thresholds"`
-	Filters    FiltersConfig    `mapstructure:"filters"`
+	Jira             JiraConfig        `mapstructure:"jira"`
+	Thresholds       ThresholdsConfig  `mapstructure:"thresholds"`
+	Filters          FiltersConfig     `mapstructure:"filters"`
+	SeverityMappings map[string]string `mapstructure:"severity_mappings"`
 }
 
 // JiraConfig contains Jira-specific settings
@@ -78,6 +78,7 @@ type ProviderConfig struct {
 	ProjectIDs      []string `mapstructure:"project_ids"`
 	ProjectPatterns []string `mapstructure:"project_patterns"`
 	ExcludeProjects []string `mapstructure:"exclude_projects"`
+	APIVersion      string   `mapstructure:"api_version"` // Snyk REST API version (e.g., "2024-10-15")
 
 	// Overrides for defaults
 	Jira    *JiraConfig    `mapstructure:"jira"`
@@ -119,6 +120,12 @@ func setDefaults(cfg *Config) {
 
 	if cfg.Defaults.Filters.MaxAgeDays == 0 {
 		cfg.Defaults.Filters.MaxAgeDays = 90
+	}
+
+	if cfg.Defaults.SeverityMappings == nil {
+		cfg.Defaults.SeverityMappings = map[string]string{
+			"moderate": "medium", // GitHub uses "moderate" instead of "medium"
+		}
 	}
 }
 
@@ -201,4 +208,14 @@ func (c *Config) ShouldAddToSprint(severity string) bool {
 	minLevel := SeverityOrder[minSeverity]
 
 	return severityLevel >= minLevel
+}
+
+// NormalizeSeverity maps provider-specific severity values to Patrol's canonical levels.
+// For example, GitHub's "moderate" is mapped to "medium".
+func (c *Config) NormalizeSeverity(severity string) string {
+	severity = strings.ToLower(severity)
+	if mapped, exists := c.Defaults.SeverityMappings[severity]; exists {
+		return mapped
+	}
+	return severity
 }

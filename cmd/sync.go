@@ -4,19 +4,28 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
+	"time"
 
 	"github.com/sentiolabs/patrol/internal/config"
 	"github.com/sentiolabs/patrol/internal/jira"
 	"github.com/sentiolabs/patrol/internal/output"
 	"github.com/sentiolabs/patrol/internal/provider"
+	"github.com/sentiolabs/patrol/internal/vuln"
 	"github.com/spf13/cobra"
+)
+
+const (
+	// commentThrottleWindow is the minimum time between patrol comments on the same ticket
+	commentThrottleWindow = 24 * time.Hour
 )
 
 var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Sync vulnerabilities from all enabled providers to Jira",
 	Long: `Sync fetches security vulnerabilities from all enabled providers
-(GitHub Dependabot, Snyk) and creates or updates Jira tickets.`,
+(GitHub Dependabot, Snyk), deduplicates them by CVE, and creates or updates
+Jira tickets with consolidated information.`,
 	RunE: runSync,
 }
 
@@ -32,6 +41,68 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	// Collect all vulnerabilities from all enabled providers concurrently
+	var (
+		wg         sync.WaitGroup
+		mu         sync.Mutex
+		allVulns   []provider.Vulnerability
+		fetchErrs  []error
+	)
+
+	for name, providerCfg := range cfg.Providers {
+		if !providerCfg.Enabled {
+			slog.Info("skipping disabled provider", "provider", name)
+			continue
+		}
+
+		// Capture loop variables for goroutine
+		name := name
+
+		wg.Go(func() {
+			slog.Info("fetching from provider", "provider", name)
+
+			p, err := provider.New(name, cfg, GetVerbose())
+			if err != nil {
+				slog.Error("failed to create provider", "provider", name, "error", err)
+				mu.Lock()
+				fetchErrs = append(fetchErrs, fmt.Errorf("%s: %w", name, err))
+				mu.Unlock()
+				return
+			}
+
+			vulns, err := p.FetchVulnerabilities(ctx)
+			if err != nil {
+				slog.Error("failed to fetch vulnerabilities", "provider", name, "error", err)
+				mu.Lock()
+				fetchErrs = append(fetchErrs, fmt.Errorf("%s: %w", name, err))
+				mu.Unlock()
+				return
+			}
+
+			slog.Info("fetched vulnerabilities", "provider", name, "count", len(vulns))
+
+			mu.Lock()
+			allVulns = append(allVulns, vulns...)
+			mu.Unlock()
+		})
+	}
+
+	wg.Wait()
+
+	// Report any provider failures
+	if len(fetchErrs) > 0 {
+		slog.Warn("some providers failed", "count", len(fetchErrs), "errors", fetchErrs)
+	}
+
+	// Merge/dedupe vulnerabilities by CVE
+	merged := vuln.Merge(allVulns)
+	slog.Info("merged vulnerabilities", "total", len(allVulns), "unique", len(merged))
+
+	// Process merged vulnerabilities
+	if GetDryRun() {
+		return outputDryRun(merged)
+	}
+
 	// Initialize Jira client
 	jiraClient, err := jira.NewClient(
 		cfg.JiraURL,
@@ -43,100 +114,93 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create Jira client: %w", err)
 	}
 
-	var allResults []output.SyncResult
-
-	// Process each enabled provider
-	for name, providerCfg := range cfg.Providers {
-		if !providerCfg.Enabled {
-			slog.Info("skipping disabled provider", "provider", name)
-			continue
-		}
-
-		slog.Info("processing provider", "provider", name)
-
-		p, err := provider.New(name, cfg, GetVerbose())
-		if err != nil {
-			slog.Error("failed to create provider", "provider", name, "error", err)
-			continue
-		}
-
-		vulns, err := p.FetchVulnerabilities(ctx)
-		if err != nil {
-			slog.Error("failed to fetch vulnerabilities", "provider", name, "error", err)
-			continue
-		}
-
-		slog.Info("fetched vulnerabilities", "provider", name, "count", len(vulns))
-
-		results, err := processVulnerabilities(ctx, cfg, jiraClient, name, vulns)
-		if err != nil {
-			slog.Error("failed to process vulnerabilities", "provider", name, "error", err)
-			continue
-		}
-
-		allResults = append(allResults, results...)
+	results, err := processMergedVulnerabilities(ctx, cfg, jiraClient, merged)
+	if err != nil {
+		return fmt.Errorf("failed to process vulnerabilities: %w", err)
 	}
 
-	// Output results
-	return output.Print(allResults, GetOutput(), GetDryRun())
+	return output.Print(results, GetOutput(), false)
 }
 
-func processVulnerabilities(
+func outputDryRun(merged []vuln.MergedVulnerability) error {
+	var results []output.SyncResult
+	for _, v := range merged {
+		results = append(results, output.SyncResult{
+			Provider:   v.ProvidersString(),
+			VulnID:     v.ID,
+			CVE:        v.CVE,
+			Severity:   v.Severity,
+			Package:    v.Package,
+			Repository: v.RepositoriesString(),
+			Action:     "would_create",
+			Status:     "dry_run",
+		})
+	}
+	return output.Print(results, GetOutput(), true)
+}
+
+func processMergedVulnerabilities(
 	ctx context.Context,
 	cfg *config.Config,
 	jiraClient *jira.Client,
-	providerName string,
-	vulns []provider.Vulnerability,
+	merged []vuln.MergedVulnerability,
 ) ([]output.SyncResult, error) {
 	var results []output.SyncResult
-	jiraCfg := cfg.GetProviderJira(providerName)
+	jiraCfg := cfg.Defaults.Jira
 
-	for _, v := range vulns {
+	for _, v := range merged {
 		result := output.SyncResult{
-			Provider:    providerName,
-			VulnID:      v.ID,
-			CVE:         v.CVE,
-			Severity:    v.Severity,
-			Package:     v.Package,
-			Repository:  v.Repository,
+			Provider:   v.ProvidersString(),
+			VulnID:     v.ID,
+			CVE:        v.CVE,
+			Severity:   v.Severity,
+			Package:    v.Package,
+			Repository: v.RepositoriesString(),
 		}
 
-		if GetDryRun() {
-			result.Action = "would_create"
-			result.Status = "dry_run"
-			results = append(results, result)
-			continue
-		}
-
-		// Check for duplicates
+		// Check for existing ticket
 		ticketInfo, err := jiraClient.FindExistingTicket(ctx, jiraCfg.Project, v.ID, v.CVE)
 		if err != nil {
 			slog.Warn("error checking for duplicates", "error", err)
 		}
 
 		if ticketInfo != nil {
-			// Add comment to existing ticket
-			err = jiraClient.AddDuplicateComment(ctx, ticketInfo, v)
+			result.JiraKey = ticketInfo.Key
+
+			// Check if enough time has passed since last patrol comment
+			lastComment, err := jiraClient.GetLastPatrolComment(ctx, ticketInfo.Key)
 			if err != nil {
-				result.Action = "update_failed"
-				result.Status = "error"
-				result.Error = err.Error()
+				slog.Warn("failed to get last comment time", "key", ticketInfo.Key, "error", err)
+			}
+
+			// Only add comment if >24 hours since last comment (or no previous comment found)
+			if lastComment.IsZero() || time.Since(lastComment) > commentThrottleWindow {
+				if err = jiraClient.AddMergedComment(ctx, ticketInfo, v); err != nil {
+					result.Action = "update_failed"
+					result.Status = "error"
+					result.Error = err.Error()
+				} else {
+					result.Action = "updated"
+					result.Status = "success"
+				}
 			} else {
-				result.Action = "updated"
-				result.Status = "success"
-				result.JiraKey = ticketInfo.Key
+				result.Action = "skipped"
+				result.Status = "throttled"
+				if GetVerbose() {
+					slog.Info("skipping comment (throttled)", "key", ticketInfo.Key, "lastComment", lastComment.Format(time.RFC3339))
+				}
 			}
 		} else {
 			// Create new ticket
 			priority := cfg.GetJiraPriority(v.Severity)
 			addToSprint := cfg.ShouldAddToSprint(v.Severity)
 
-			key, err := jiraClient.CreateTicket(ctx, jiraCfg, v, priority, addToSprint)
+			key, err := jiraClient.CreateMergedTicket(ctx, jiraCfg, v, priority, addToSprint)
 			if err != nil {
 				result.Action = "create_failed"
 				result.Status = "error"
 				result.Error = err.Error()
-				slog.Error("failed to create Jira ticket", "vuln", v.CVE, "package", v.Package, "error", err)
+				slog.Error("failed to create Jira ticket", "vuln", v.DisplayID(), "package", v.Package, "error", err)
 			} else {
 				result.Action = "created"
 				result.Status = "success"

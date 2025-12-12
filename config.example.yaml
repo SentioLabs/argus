@@ -1,63 +1,62 @@
 # Patrol Configuration
-# Base provider config (inherited by all providers)
+
+# Default settings (used by sync command)
 defaults:
   jira:
-    project: "SEC"
-    board_name: "Security Team Board"
-    assignee: "default-user"
+    project: "SEC"                    # Jira project key
+    board_id: 17                      # Board ID for sprint assignment (preferred)
+    # board_name: "Security Board"   # Or use board name instead
+    assignee: ""                      # Jira account ID (leave empty for unassigned)
     labels:
       - security
       - vulnerability
-    components:
-      - security
+    components: []                    # Optional component names
   thresholds:
     priority:
       critical: "Highest"
       high: "High"
       medium: "Medium"
       low: "Low"
-    sprint_min_severity: "high"  # Add to active sprint if >= this severity
+    sprint_min_severity: "high"       # Add to active sprint if >= this severity
   filters:
-    min_severity: "medium"
-    max_age_days: 90
-    cvss_min: 4.0
+    min_severity: "medium"            # Minimum severity to sync
+    max_age_days: 90                  # Ignore vulns older than this
+    cvss_min: 0                       # Minimum CVSS score (0 = no minimum)
 
-# Provider-specific configs (override defaults)
+  # Severity mappings normalize provider-specific values to Patrol's canonical levels.
+  # Patrol uses: critical, high, medium, low
+  # Default: moderate → medium (for GitHub Dependabot compatibility)
+  # severity_mappings:
+  #   moderate: medium                # GitHub's "moderate" → Patrol's "medium"
+  #   # informational: low            # Example custom mapping
+
+# Provider configurations
 providers:
   github:
     enabled: true
     orgs:
       - your-org
-    repos: []  # Empty = all repos in org
-    repo_patterns: []  # e.g., ["patrol-*", "api-*"]
+    repos: []                         # Empty = all repos in org
+    repo_patterns: []                 # Glob patterns, e.g., ["api-*", "service-*"]
     exclude_repos:
       - archived-repo
-    jira:
-      assignee: "github-security-lead"
-      labels:
-        - security
-        - dependabot
-    filters:
-      packages: []  # Empty = all packages
+    filters:                          # Override default filters for this provider
+      min_severity: "medium"
       exclude_packages:
         - dev-only-pkg
 
   snyk:
     enabled: true
     org_id: "your-snyk-org-id"
-    project_ids: []  # Empty = all projects (filtered by patterns below)
-    project_patterns: []  # Glob patterns to include, e.g., ["BACtrack/view-*", "api-*"]
-    exclude_projects: []  # Exact project names to exclude
-    jira:
-      assignee: "snyk-security-lead"
-      labels:
-        - security
-        - snyk
-    filters:
-      min_severity: "high"  # Override default
+    api_version: ""                   # Snyk REST API version (default: "2025-11-05")
+    project_ids: []                   # Empty = all projects
+    project_patterns: []              # Glob patterns, e.g., ["your-org/*"]
+    exclude_projects: []              # Exact project names to exclude
+    filters:                          # Override default filters for this provider
+      min_severity: "high"
 
 # Environment variables required:
-# PATROL_GITHUB_TOKEN  - GitHub personal access token
+# PATROL_GITHUB_TOKEN  - GitHub personal access token (needs security_events scope)
 # PATROL_SNYK_TOKEN    - Snyk API token
 # PATROL_JIRA_URL      - Jira instance URL (e.g., https://your-domain.atlassian.net)
 # PATROL_JIRA_USERNAME - Jira username/email

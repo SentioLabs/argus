@@ -5,8 +5,22 @@ import (
 	"time"
 
 	"github.com/sentiolabs/patrol/internal/config"
-	"github.com/sentiolabs/patrol/internal/provider"
 )
+
+// testVulnerability is a test-local type implementing Filterable interface
+// to avoid import cycle with provider package
+type testVulnerability struct {
+	ID           string
+	Severity     string
+	CVSS         float64
+	Package      string
+	DiscoveredAt time.Time
+}
+
+func (v testVulnerability) GetSeverity() string      { return v.Severity }
+func (v testVulnerability) GetCVSS() float64         { return v.CVSS }
+func (v testVulnerability) GetDiscoveredAt() time.Time { return v.DiscoveredAt }
+func (v testVulnerability) GetPackage() string       { return v.Package }
 
 func TestFilter_ShouldInclude_Severity(t *testing.T) {
 	tests := []struct {
@@ -27,7 +41,7 @@ func TestFilter_ShouldInclude_Severity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := New(config.FiltersConfig{MinSeverity: tt.minSeverity})
-			v := provider.Vulnerability{
+			v := testVulnerability{
 				Severity:     tt.vulnSev,
 				DiscoveredAt: time.Now(),
 			}
@@ -54,7 +68,7 @@ func TestFilter_ShouldInclude_CVSS(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := New(config.FiltersConfig{CVSSMin: tt.minCVSS})
-			v := provider.Vulnerability{
+			v := testVulnerability{
 				CVSS:         tt.vulnCVSS,
 				Severity:     "high",
 				DiscoveredAt: time.Now(),
@@ -82,7 +96,7 @@ func TestFilter_ShouldInclude_Age(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := New(config.FiltersConfig{MaxAgeDays: tt.maxAgeDays})
-			v := provider.Vulnerability{
+			v := testVulnerability{
 				Severity:     "high",
 				DiscoveredAt: time.Now().AddDate(0, 0, -tt.daysAgo),
 			}
@@ -115,7 +129,7 @@ func TestFilter_ShouldInclude_Packages(t *testing.T) {
 				Packages:        tt.packages,
 				ExcludePackages: tt.exclude,
 			})
-			v := provider.Vulnerability{
+			v := testVulnerability{
 				Package:      tt.pkgName,
 				Severity:     "high",
 				DiscoveredAt: time.Now(),
@@ -124,29 +138,6 @@ func TestFilter_ShouldInclude_Packages(t *testing.T) {
 				t.Errorf("ShouldInclude() = %v, want %v", got, tt.want)
 			}
 		})
-	}
-}
-
-func TestFilter_Apply(t *testing.T) {
-	f := New(config.FiltersConfig{MinSeverity: "high"})
-
-	vulns := []provider.Vulnerability{
-		{ID: "1", Severity: "critical", DiscoveredAt: time.Now()},
-		{ID: "2", Severity: "high", DiscoveredAt: time.Now()},
-		{ID: "3", Severity: "medium", DiscoveredAt: time.Now()},
-		{ID: "4", Severity: "low", DiscoveredAt: time.Now()},
-	}
-
-	filtered := f.Apply(vulns)
-
-	if len(filtered) != 2 {
-		t.Errorf("Apply() returned %d vulnerabilities, want 2", len(filtered))
-	}
-
-	for _, v := range filtered {
-		if v.Severity != "critical" && v.Severity != "high" {
-			t.Errorf("Apply() included unexpected severity: %s", v.Severity)
-		}
 	}
 }
 
