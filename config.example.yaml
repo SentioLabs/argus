@@ -1,0 +1,64 @@
+# Patrol Configuration
+# Base provider config (inherited by all providers)
+defaults:
+  jira:
+    project: "SEC"
+    board_name: "Security Team Board"
+    assignee: "default-user"
+    labels:
+      - security
+      - vulnerability
+    components:
+      - security
+  thresholds:
+    priority:
+      critical: "Highest"
+      high: "High"
+      medium: "Medium"
+      low: "Low"
+    sprint_min_severity: "high"  # Add to active sprint if >= this severity
+  filters:
+    min_severity: "medium"
+    max_age_days: 90
+    cvss_min: 4.0
+
+# Provider-specific configs (override defaults)
+providers:
+  github:
+    enabled: true
+    orgs:
+      - your-org
+    repos: []  # Empty = all repos in org
+    repo_patterns: []  # e.g., ["patrol-*", "api-*"]
+    exclude_repos:
+      - archived-repo
+    jira:
+      assignee: "github-security-lead"
+      labels:
+        - security
+        - dependabot
+    filters:
+      packages: []  # Empty = all packages
+      exclude_packages:
+        - dev-only-pkg
+
+  snyk:
+    enabled: true
+    org_id: "your-snyk-org-id"
+    project_ids: []  # Empty = all projects (filtered by patterns below)
+    project_patterns: []  # Glob patterns to include, e.g., ["BACtrack/view-*", "api-*"]
+    exclude_projects: []  # Exact project names to exclude
+    jira:
+      assignee: "snyk-security-lead"
+      labels:
+        - security
+        - snyk
+    filters:
+      min_severity: "high"  # Override default
+
+# Environment variables required:
+# PATROL_GITHUB_TOKEN  - GitHub personal access token
+# PATROL_SNYK_TOKEN    - Snyk API token
+# PATROL_JIRA_URL      - Jira instance URL (e.g., https://your-domain.atlassian.net)
+# PATROL_JIRA_USERNAME - Jira username/email
+# PATROL_JIRA_TOKEN    - Jira API token
