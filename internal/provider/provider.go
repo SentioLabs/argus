@@ -1,3 +1,5 @@
+// Package provider defines the interface and implementations for vulnerability providers.
+// It includes support for GitHub and Snyk.
 package provider
 
 import (
@@ -16,7 +18,8 @@ const (
 	APIPageSize = 100
 )
 
-// Vulnerability represents a security vulnerability from any provider
+// Vulnerability represents a security vulnerability from any provider.
+// This is the canonical model used throughout Patrol.
 type Vulnerability struct {
 	ID           string    `json:"id"`
 	CVE          string    `json:"cve,omitempty"`
@@ -48,12 +51,13 @@ func NormalizeSeverity(severity string, mappings map[string]string) string {
 	return severity
 }
 
-// Provider defines the interface for security vulnerability providers
+// Provider defines the interface for security vulnerability providers.
+// Implementations must be thread-safe as they are called concurrently.
 type Provider interface {
-	// Name returns the provider name
+	// Name returns the provider name.
 	Name() string
 
-	// FetchVulnerabilities retrieves all vulnerabilities from the provider
+	// FetchVulnerabilities retrieves all vulnerabilities from the provider.
 	FetchVulnerabilities(ctx context.Context) ([]Vulnerability, error)
 }
 

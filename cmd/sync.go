@@ -41,12 +41,11 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Collect all vulnerabilities from all enabled providers concurrently
 	var (
-		wg         sync.WaitGroup
-		mu         sync.Mutex
-		allVulns   []provider.Vulnerability
-		fetchErrs  []error
+		wg        sync.WaitGroup
+		mu        sync.Mutex
+		allVulns  []provider.Vulnerability
+		fetchErrs []error
 	)
 
 	for name, providerCfg := range cfg.Providers {
@@ -55,7 +54,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		// Capture loop variables for goroutine
+		// Capture loop variable
 		name := name
 
 		wg.Go(func() {

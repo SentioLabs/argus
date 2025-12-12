@@ -9,7 +9,8 @@ import (
 )
 
 // MergedVulnerability represents a vulnerability that may have been
-// detected by multiple providers across multiple repositories
+// detected by multiple providers across multiple repositories.
+// It aggregates information to provide a unified view of the security issue.
 type MergedVulnerability struct {
 	// Core vulnerability info (from first detection)
 	ID           string
@@ -28,8 +29,9 @@ type MergedVulnerability struct {
 	Repositories []string // all repos where detected
 }
 
-// Merge combines vulnerabilities from multiple providers, deduplicating by CVE
-// (or by package+severity+ID if no CVE is available)
+// Merge combines vulnerabilities from multiple providers.
+// It deduplicates by CVE (preferred) or by a combination of Package, Severity, and ID.
+// It aggregates providers and repositories, and retains the most critical/complete information (e.g., highest CVSS, earliest discovery).
 func Merge(vulns []provider.Vulnerability) []MergedVulnerability {
 	byKey := make(map[string]*MergedVulnerability)
 
@@ -112,7 +114,7 @@ func appendUnique(slice []string, value string) []string {
 	return append(slice, value)
 }
 
-// ProvidersString returns a comma-separated list of providers
+// ProvidersString returns a comma-separated list of providers sorted and joined.
 func (m *MergedVulnerability) ProvidersString() string {
 	return strings.Join(m.Providers, ", ")
 }
@@ -122,7 +124,7 @@ func (m *MergedVulnerability) RepositoriesString() string {
 	return strings.Join(m.Repositories, ", ")
 }
 
-// DisplayID returns CVE if available, otherwise the vulnerability ID
+// DisplayID returns the most appropriate identifier for display (CVE if available, otherwise internal ID).
 func (m *MergedVulnerability) DisplayID() string {
 	if m.CVE != "" {
 		return m.CVE

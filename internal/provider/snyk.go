@@ -45,18 +45,18 @@ type snykRESTProjectsResponse struct {
 }
 
 type snykRESTProject struct {
-	ID         string                   `json:"id"`
-	Type       string                   `json:"type"`
-	Attributes snykRESTProjectAttrs     `json:"attributes"`
+	ID         string               `json:"id"`
+	Type       string               `json:"type"`
+	Attributes snykRESTProjectAttrs `json:"attributes"`
 }
 
 type snykRESTProjectAttrs struct {
-	Name        string    `json:"name"`
-	Type        string    `json:"type"`
-	Origin      string    `json:"origin"`
-	Created     time.Time `json:"created"`
-	Status      string    `json:"status"`
-	TargetFile  string    `json:"target_file,omitempty"`
+	Name       string    `json:"name"`
+	Type       string    `json:"type"`
+	Origin     string    `json:"origin"`
+	Created    time.Time `json:"created"`
+	Status     string    `json:"status"`
+	TargetFile string    `json:"target_file,omitempty"`
 }
 
 type snykLinks struct {

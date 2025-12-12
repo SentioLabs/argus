@@ -13,7 +13,6 @@ import (
 	"golang.org/x/oauth2"
 )
 
-
 // GitHubProvider fetches Dependabot alerts from GitHub
 type GitHubProvider struct {
 	client           *github.Client
@@ -127,12 +126,10 @@ func (p *GitHubProvider) getRepositories(ctx context.Context) ([]string, error) 
 		for _, repo := range orgRepos {
 			fullName := fmt.Sprintf("%s/%s", org, repo)
 
-			// Check exclusions
 			if p.isExcluded(repo) {
 				continue
 			}
 
-			// Check patterns
 			if len(p.repoPatterns) > 0 && !p.matchesPattern(repo) {
 				continue
 			}
@@ -183,7 +180,7 @@ func (p *GitHubProvider) getAlertsForRepo(ctx context.Context, repo string) ([]*
 
 	var allAlerts []*github.DependabotAlert
 	opts := &github.ListAlertsOptions{
-		State: github.String("open"),
+		State:       github.String("open"),
 		ListOptions: github.ListOptions{PerPage: APIPageSize},
 	}
 

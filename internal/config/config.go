@@ -1,3 +1,6 @@
+// Package config handles the loading and management of Patrol's configuration.
+// It supports loading from a YAML configuration file and environment variables,
+// with environment variables taking precedence.
 package config
 
 import (
@@ -16,7 +19,8 @@ var SeverityOrder = map[string]int{
 	"critical": 4,
 }
 
-// Config represents the full application configuration
+// Config represents the full application configuration.
+// It combines secrets loaded from environment variables and settings from the config file.
 type Config struct {
 	// Secrets (loaded from environment variables)
 	GitHubToken  string `mapstructure:"github_token"`
@@ -85,7 +89,8 @@ type ProviderConfig struct {
 	Filters *FiltersConfig `mapstructure:"filters"`
 }
 
-// Load reads the configuration from viper
+// Load reads the configuration from the config file and environment variables.
+// It applies default values for missing optional fields.
 func Load() (*Config, error) {
 	var cfg Config
 
@@ -129,7 +134,8 @@ func setDefaults(cfg *Config) {
 	}
 }
 
-// GetProviderJira returns Jira config for a provider, merging with defaults
+// GetProviderJira returns the Jira configuration for a specific provider.
+// It merges provider-specific overrides with the default Jira configuration.
 func (c *Config) GetProviderJira(providerName string) JiraConfig {
 	jira := c.Defaults.Jira
 
@@ -161,7 +167,8 @@ func (c *Config) GetProviderJira(providerName string) JiraConfig {
 	return jira
 }
 
-// GetProviderFilters returns filters for a provider, merging with defaults
+// GetProviderFilters returns the filter configuration for a specific provider.
+// It merges provider-specific overrides with the default filter configuration.
 func (c *Config) GetProviderFilters(providerName string) FiltersConfig {
 	filters := c.Defaults.Filters
 

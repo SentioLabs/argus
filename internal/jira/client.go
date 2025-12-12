@@ -70,7 +70,8 @@ func NewClient(url, username, token string, verbose bool) (*Client, error) {
 	}, nil
 }
 
-// FindExistingTicket searches for an existing open ticket with the given vulnerability ID or CVE
+// FindExistingTicket searches for an existing open ticket with the given vulnerability ID or CVE.
+// It uses JQL to find tickets that are not in "Done" status and have the "patrol" label.
 func (c *Client) FindExistingTicket(ctx context.Context, project, vulnID, cve string) (*TicketInfo, error) {
 	// Build JQL query to find existing open tickets
 	var jqlParts []string
@@ -223,16 +224,15 @@ Current detection:
 	return nil
 }
 
-// CreateMergedTicket creates a new Jira ticket for a merged vulnerability
+// CreateMergedTicket creates a new Jira ticket for a merged vulnerability.
+// It constructs the ticket summary, description, and applies necessary labels and components.
 func (c *Client) CreateMergedTicket(ctx context.Context, jiraCfg config.JiraConfig, v vuln.MergedVulnerability, priority string, addToSprint bool) (string, error) {
-	// Build summary
 	displayID := v.CVE
 	if displayID == "" {
 		displayID = v.ID
 	}
 	summary := fmt.Sprintf("[%s] %s in %s", v.Severity, displayID, v.Package)
 
-	// Build description
 	description := buildMergedDescription(v)
 
 	// Build issue fields
@@ -377,11 +377,11 @@ func parseJiraTimestamp(ts string) (time.Time, error) {
 	// - "2024-01-15T10:30:00.000-0700" (with colon in timezone)
 	// - "2024-01-15T10:30:00.000Z"     (UTC)
 	formats := []string{
-		"2006-01-02T15:04:05.000-0700",  // with colon
-		"2006-01-02T15:04:05.000Z0700",  // without colon
-		"2006-01-02T15:04:05.000Z",      // UTC
-		time.RFC3339,                    // standard
-		time.RFC3339Nano,                // with nanos
+		"2006-01-02T15:04:05.000-0700", // with colon
+		"2006-01-02T15:04:05.000Z0700", // without colon
+		"2006-01-02T15:04:05.000Z",     // UTC
+		time.RFC3339,                   // standard
+		time.RFC3339Nano,               // with nanos
 	}
 
 	for _, format := range formats {

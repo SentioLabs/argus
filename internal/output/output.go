@@ -1,3 +1,5 @@
+// Package output handles the formatting and display of Patrol's execution results.
+// It supports multiple formats such as JSON and Table.
 package output
 
 import (
@@ -39,7 +41,8 @@ type Output struct {
 	DryRun  bool         `json:"dry_run"`
 }
 
-// Print outputs the sync results in the specified format
+// Print outputs the sync results in the specified format (json or table).
+// If dryRun is true, it indicates that no changes were actually made.
 func Print(results []SyncResult, format string, dryRun bool) error {
 	output := Output{
 		Results: results,

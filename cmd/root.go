@@ -23,6 +23,8 @@ var rootCmd = &cobra.Command{
 to Jira, creating and updating tickets based on configurable thresholds.`,
 }
 
+// Execute adds all child commands to the root command and sets flags appropriately.
+// This is called by main.main(). It only returns an error for initialization issues.
 func Execute() error {
 	return rootCmd.Execute()
 }
@@ -37,10 +39,7 @@ func init() {
 }
 
 func initConfig() {
-	// ExperimentalBindStruct enables automatic binding of struct tags to env vars.
-	// WARNING: This is an experimental Viper API that may change in future versions.
-	// If Viper removes or changes this API, replace with explicit viper.BindEnv() calls.
-	// See: https://github.com/spf13/viper#working-with-environment-variables
+	// Automatically bind matching environment variables
 	viper.SetOptions(viper.ExperimentalBindStruct())
 	viper.SetEnvPrefix("PATROL")
 	viper.AutomaticEnv()
@@ -63,14 +62,18 @@ func initConfig() {
 	}
 }
 
+// GetDryRun returns true if the dry-run flag is set.
+// In dry-run mode, no changes are made to external systems (e.g. Jira).
 func GetDryRun() bool {
 	return dryRun
 }
 
+// GetOutput returns the configured output format (e.g., "json" or "table").
 func GetOutput() string {
 	return outputFormat
 }
 
+// GetVerbose returns true if verbose logging is enabled.
 func GetVerbose() bool {
 	return verbose
 }

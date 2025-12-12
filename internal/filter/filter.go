@@ -1,3 +1,5 @@
+// Package filter implements the vulnerability filtering logic for Patrol.
+// It supports filtering by severity, CVSS score, age, and package patterns.
 package filter
 
 import (
@@ -9,7 +11,7 @@ import (
 	"github.com/sentiolabs/patrol/internal/config"
 )
 
-// Filterable defines the interface for vulnerability filtering
+// Filterable defines the interface that a vulnerability must implement to be filtered.
 type Filterable interface {
 	GetSeverity() string
 	GetCVSS() float64
@@ -99,7 +101,8 @@ func (f *Filter) checkPackageExclude(v Filterable) bool {
 	return true
 }
 
-// MatchPattern checks if a string matches a glob-like pattern
+// MatchPattern checks if a string matches a glob-like pattern.
+// It performs a case-insensitive match using filepath.Match.
 func MatchPattern(pattern, s string) bool {
 	// Handle case-insensitive matching
 	matched, err := filepath.Match(strings.ToLower(pattern), strings.ToLower(s))
@@ -110,7 +113,7 @@ func MatchPattern(pattern, s string) bool {
 	return matched
 }
 
-// MatchRepository checks if a repository matches any pattern in the list
+// MatchRepository checks if a repository name matches any of the provided patterns.
 func MatchRepository(patterns []string, repo string) bool {
 	if len(patterns) == 0 {
 		return true
@@ -123,7 +126,7 @@ func MatchRepository(patterns []string, repo string) bool {
 	return false
 }
 
-// IsExcluded checks if a value is in the exclusion list
+// IsExcluded checks if a value exists in the exclusion list (case-insensitive).
 func IsExcluded(exclusions []string, value string) bool {
 	for _, excluded := range exclusions {
 		if strings.EqualFold(excluded, value) {
