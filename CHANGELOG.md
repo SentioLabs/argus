@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.3] - 2025-12-18
+
+### Bug Fixes
+
+- Switch to GitHub-hosted runners
+
 ## [0.1.2] - 2025-12-18
 
 ### Bug Fixes
