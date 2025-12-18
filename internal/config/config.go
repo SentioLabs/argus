@@ -46,13 +46,12 @@ type DefaultsConfig struct {
 
 // JiraConfig contains Jira-specific settings
 type JiraConfig struct {
-	Project    string            `mapstructure:"project"`
-	BoardID    int               `mapstructure:"board_id"`
-	BoardName  string            `mapstructure:"board_name"`
-	Assignee   string            `mapstructure:"assignee"`
-	Users      map[string]string `mapstructure:"users"` // Maps friendly names to Jira user IDs
-	Labels     []string          `mapstructure:"labels"`
-	Components []string          `mapstructure:"components"`
+	Project    string   `mapstructure:"project"`
+	BoardID    int      `mapstructure:"board_id"`
+	BoardName  string   `mapstructure:"board_name"`
+	Assignee   string   `mapstructure:"assignee"` // Email address or Jira account ID
+	Labels     []string `mapstructure:"labels"`
+	Components []string `mapstructure:"components"`
 }
 
 // ThresholdsConfig contains severity threshold mappings
@@ -305,30 +304,3 @@ func (c *Config) NormalizeSeverity(severity string) string {
 	return severity
 }
 
-// ResolveUserID converts a user alias to a Jira user ID.
-// If the alias exists in the users map, returns the mapped ID.
-// Otherwise returns the input unchanged (assumes it's already a Jira ID).
-func (c *Config) ResolveUserID(alias string) string {
-	if alias == "" {
-		return ""
-	}
-	if id, exists := c.Defaults.Jira.Users[alias]; exists {
-		return id
-	}
-	return alias
-}
-
-// GetUserAlias returns the alias for a Jira user ID.
-// If the ID matches a user in the users map, returns the alias.
-// Otherwise returns the input unchanged.
-func (c *Config) GetUserAlias(jiraID string) string {
-	if jiraID == "" {
-		return ""
-	}
-	for alias, id := range c.Defaults.Jira.Users {
-		if id == jiraID {
-			return alias
-		}
-	}
-	return jiraID
-}

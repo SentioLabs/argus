@@ -103,7 +103,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 
 	// Process merged vulnerabilities
 	if GetDryRun() {
-		return outputDryRun(cfg, merged)
+		return outputDryRun(merged)
 	}
 
 	// Initialize Jira client
@@ -117,7 +117,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create Jira client: %w", err)
 	}
 
-	results, err := processMergedVulnerabilities(ctx, cfg, jiraClient, merged)
+	results, err := processMergedVulnerabilities(ctx, cfg, jiraClient, resolver, merged)
 	if err != nil {
 		return fmt.Errorf("failed to process vulnerabilities: %w", err)
 	}
@@ -125,7 +125,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 	return output.Print(results, GetOutput(), false)
 }
 
-func outputDryRun(cfg *config.Config, merged []vuln.MergedVulnerability) error {
+func outputDryRun(merged []vuln.MergedVulnerability) error {
 	var results []output.SyncResult
 	for _, v := range merged {
 		results = append(results, output.SyncResult{
@@ -137,7 +137,7 @@ func outputDryRun(cfg *config.Config, merged []vuln.MergedVulnerability) error {
 			Repository: v.RepositoriesString(),
 			Action:     "would_create",
 			Status:     "dry_run",
-			Assignee:   cfg.GetUserAlias(v.Assignee),
+			Assignee:   v.Assignee, // Email or account ID (not resolved in dry-run)
 		})
 	}
 	return output.Print(results, GetOutput(), true)
@@ -147,14 +147,22 @@ func processMergedVulnerabilities(
 	ctx context.Context,
 	cfg *config.Config,
 	jiraClient *jira.Client,
+	resolver *config.AssigneeResolver,
 	merged []vuln.MergedVulnerability,
 ) ([]output.SyncResult, error) {
 	var results []output.SyncResult
 
 	for _, v := range merged {
-		// Get base Jira config from first provider, then override with pre-resolved assignee
+		// Get base Jira config from first provider
 		jiraCfg := cfg.GetProviderJira(v.Providers[0])
-		jiraCfg.Assignee = v.Assignee
+
+		// Resolve assignee email to Jira account ID with fallback
+		resolvedAssignee, err := jiraClient.ResolveAssigneeWithFallback(ctx, resolver, v.Providers[0], v.Repositories[0])
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve assignee for %s: %w", v.DisplayID(), err)
+		}
+		jiraCfg.Assignee = resolvedAssignee
+
 		result := output.SyncResult{
 			Provider:   v.ProvidersString(),
 			VulnID:     v.ID,
@@ -162,7 +170,7 @@ func processMergedVulnerabilities(
 			Severity:   v.Severity,
 			Package:    v.Package,
 			Repository: v.RepositoriesString(),
-			Assignee:   cfg.GetUserAlias(v.Assignee),
+			Assignee:   v.Assignee, // Show original email in output
 		}
 
 		// Check for existing ticket

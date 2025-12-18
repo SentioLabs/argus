@@ -178,27 +178,24 @@ func TestMatchRepoPattern(t *testing.T) {
 	}
 }
 
-func TestAssigneeResolver_UserAliasResolution(t *testing.T) {
+func TestAssigneeResolver_GetCandidates(t *testing.T) {
 	cfg := &Config{
 		Defaults: DefaultsConfig{
 			Jira: JiraConfig{
-				Assignee: "user-foo", // Uses alias
-				Users: map[string]string{
-					"user-foo": "712091:bb3edb2b-53b3-47cb-b6e0-28cc22252cf1",
-					"user-bar": "712099:aa3edb2b-53b3-47cb-b6e0-28cc22252cf1",
-				},
+				Assignee: "global@example.com",
 			},
 		},
 		Providers: map[string]ProviderConfig{
 			"github": {
 				Jira: &JiraConfig{
-					Assignee: "user-bar", // Uses alias
+					Assignee: "github@example.com",
 				},
 				RepoIncludes: []RepoInclude{
-					{Name: "org/repo1", Assignee: "user-foo"},                          // Uses alias
-					{Name: "org/repo2", Assignee: "712000:raw-jira-id"},                // Uses raw ID
-					{Name: "org/repo3", Assignee: "unknown-alias"},                     // Unknown alias passed through
+					{Name: "org/repo1", Assignee: "repo1@example.com"},
 				},
+			},
+			"snyk": {
+				// No Jira override - should only have global
 			},
 		},
 	}
@@ -209,97 +206,70 @@ func TestAssigneeResolver_UserAliasResolution(t *testing.T) {
 		name       string
 		provider   string
 		repository string
-		want       string
+		want       []string
 	}{
 		{
-			name:       "repo-level alias resolved",
+			name:       "all three levels",
 			provider:   "github",
 			repository: "org/repo1",
-			want:       "712091:bb3edb2b-53b3-47cb-b6e0-28cc22252cf1",
+			want:       []string{"repo1@example.com", "github@example.com", "global@example.com"},
 		},
 		{
-			name:       "raw Jira ID passed through",
-			provider:   "github",
-			repository: "org/repo2",
-			want:       "712000:raw-jira-id",
-		},
-		{
-			name:       "unknown alias passed through",
-			provider:   "github",
-			repository: "org/repo3",
-			want:       "unknown-alias",
-		},
-		{
-			name:       "provider-level alias resolved",
+			name:       "provider and global only",
 			provider:   "github",
 			repository: "org/other",
-			want:       "712099:aa3edb2b-53b3-47cb-b6e0-28cc22252cf1",
+			want:       []string{"github@example.com", "global@example.com"},
 		},
 		{
-			name:       "global default alias resolved",
+			name:       "global only",
 			provider:   "snyk",
 			repository: "any-project",
-			want:       "712091:bb3edb2b-53b3-47cb-b6e0-28cc22252cf1",
+			want:       []string{"global@example.com"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := resolver.Resolve(tt.provider, tt.repository)
-			if got != tt.want {
-				t.Errorf("Resolve(%q, %q) = %q, want %q",
-					tt.provider, tt.repository, got, tt.want)
+			got := resolver.GetCandidates(tt.provider, tt.repository)
+			if len(got) != len(tt.want) {
+				t.Errorf("GetCandidates() returned %d candidates, want %d: got %v, want %v",
+					len(got), len(tt.want), got, tt.want)
+				return
+			}
+			for i, candidate := range got {
+				if candidate != tt.want[i] {
+					t.Errorf("GetCandidates()[%d] = %q, want %q", i, candidate, tt.want[i])
+				}
 			}
 		})
 	}
 }
 
-func TestResolveUserID(t *testing.T) {
+func TestAssigneeResolver_GetCandidates_NoDuplicates(t *testing.T) {
+	// When provider and global have the same assignee, should not duplicate
 	cfg := &Config{
 		Defaults: DefaultsConfig{
 			Jira: JiraConfig{
-				Users: map[string]string{
-					"alice": "712091:alice-id",
-					"bob":   "712099:bob-id",
+				Assignee: "same@example.com",
+			},
+		},
+		Providers: map[string]ProviderConfig{
+			"github": {
+				Jira: &JiraConfig{
+					Assignee: "same@example.com", // Same as global
 				},
 			},
 		},
 	}
 
-	tests := []struct {
-		name  string
-		alias string
-		want  string
-	}{
-		{"known alias", "alice", "712091:alice-id"},
-		{"another known alias", "bob", "712099:bob-id"},
-		{"unknown alias passed through", "charlie", "charlie"},
-		{"raw ID passed through", "712000:raw-id", "712000:raw-id"},
-		{"empty string", "", ""},
-	}
+	resolver := NewAssigneeResolver(cfg)
+	got := resolver.GetCandidates("github", "any-repo")
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := cfg.ResolveUserID(tt.alias)
-			if got != tt.want {
-				t.Errorf("ResolveUserID(%q) = %q, want %q", tt.alias, got, tt.want)
-			}
-		})
+	// Should only have one entry, not duplicated
+	if len(got) != 1 {
+		t.Errorf("expected 1 candidate (no duplicates), got %d: %v", len(got), got)
 	}
-}
-
-func TestResolveUserID_NilMap(t *testing.T) {
-	cfg := &Config{
-		Defaults: DefaultsConfig{
-			Jira: JiraConfig{
-				// Users map is nil
-			},
-		},
-	}
-
-	// Should pass through when users map is nil
-	got := cfg.ResolveUserID("any-alias")
-	if got != "any-alias" {
-		t.Errorf("ResolveUserID with nil map should pass through, got %q", got)
+	if got[0] != "same@example.com" {
+		t.Errorf("expected 'same@example.com', got %q", got[0])
 	}
 }

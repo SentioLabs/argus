@@ -37,14 +37,8 @@ defaults:
   jira:
     project: "SEC"
     board_name: "Security Team Board"
-    # User aliases map friendly names to Jira account IDs
-    # Use these aliases anywhere an assignee is needed
-    users:
-      default-user: "712020:abc12345-1234-5678-90ab-cdef01234567"
-      security-lead: "712021:def12345-1234-5678-90ab-cdef01234567"
-      frontend-lead: "712022:ghi12345-1234-5678-90ab-cdef01234567"
-      backend-lead: "712023:jkl12345-1234-5678-90ab-cdef01234567"
-    assignee: "default-user"  # Tier 1: Global default (uses alias from users map)
+    # Assignees can be email addresses (resolved via Jira API) or raw account IDs
+    assignee: "security-team@example.com"  # Tier 1: Global default
     labels:
       - security
       - vulnerability
@@ -83,14 +77,14 @@ providers:
     repo_includes:
       - "your-org/api-*"              # Pattern: all api-* repos
       - name: "your-org/frontend"     # Repo with assignee override
-        assignee: "frontend-lead"     # Uses alias from users map
+        assignee: "frontend-team@example.com"
       - name: "your-org/backend"
-        assignee: "backend-lead"      # Uses alias from users map
+        assignee: "backend-team@example.com"
     # repo_excludes: Exclude repos/patterns (supports glob patterns)
     repo_excludes:
       - "your-org/archived-*"
     jira:
-      assignee: "security-lead"  # Tier 2: Provider-level override (uses alias)
+      assignee: "github-security@example.com"  # Tier 2: Provider-level override
       labels:
         - security
         - dependabot
@@ -108,7 +102,7 @@ providers:
     # project_excludes: Exclude projects/patterns
     project_excludes: []
     jira:
-      assignee: "snyk-security-lead"  # Tier 2: Provider-level override
+      assignee: "snyk-security@example.com"  # Tier 2: Provider-level override
       labels:
         - security
         - snyk
@@ -160,13 +154,6 @@ func runConfigValidate(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("  Sprint Min Severity: %s\n", cfg.Defaults.Thresholds.SprintMinSeverity)
 	fmt.Printf("  Filter Min Severity: %s\n", cfg.Defaults.Filters.MinSeverity)
-
-	if len(cfg.Defaults.Jira.Users) > 0 {
-		fmt.Printf("\nUsers:\n")
-		for name := range cfg.Defaults.Jira.Users {
-			fmt.Printf("  - %s\n", name)
-		}
-	}
 
 	fmt.Printf("\nProviders:\n")
 	for name, provider := range cfg.Providers {

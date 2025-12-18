@@ -15,8 +15,9 @@ import (
 
 // Client wraps the Jira API client
 type Client struct {
-	client  *jira.Client
-	verbose bool
+	client     *jira.Client
+	verbose    bool
+	emailCache map[string]string // email -> accountID cache for the session
 }
 
 // escapeJQL escapes special characters in JQL query strings to prevent injection
@@ -65,9 +66,81 @@ func NewClient(url, username, token string, verbose bool) (*Client, error) {
 	}
 
 	return &Client{
-		client:  client,
-		verbose: verbose,
+		client:     client,
+		verbose:    verbose,
+		emailCache: make(map[string]string),
 	}, nil
+}
+
+// ResolveAssignee converts an email address to a Jira account ID.
+// If the value contains "@", it's treated as an email and looked up via the Jira API.
+// Otherwise, it's assumed to be a raw account ID and returned as-is.
+// Results are cached for the duration of the session.
+func (c *Client) ResolveAssignee(ctx context.Context, assignee string) (string, error) {
+	if assignee == "" {
+		return "", nil
+	}
+
+	// Not an email - return as-is (assumed to be raw account ID)
+	if !strings.Contains(assignee, "@") {
+		return assignee, nil
+	}
+
+	// Check cache first
+	if cached, ok := c.emailCache[assignee]; ok {
+		if c.verbose {
+			slog.Debug("using cached email resolution", "email", assignee, "accountID", cached)
+		}
+		return cached, nil
+	}
+
+	// Lookup via Jira API
+	if c.verbose {
+		slog.Debug("looking up user by email", "email", assignee)
+	}
+
+	users, _, err := c.client.User.Find(ctx, assignee, jira.WithActive(true))
+	if err != nil {
+		return "", fmt.Errorf("failed to lookup user %s: %w", assignee, err)
+	}
+
+	// Find exact email match (Find() does partial matching)
+	for _, user := range users {
+		if strings.EqualFold(user.EmailAddress, assignee) {
+			c.emailCache[assignee] = user.AccountID
+			if c.verbose {
+				slog.Debug("resolved email to account ID", "email", assignee, "accountID", user.AccountID, "displayName", user.DisplayName)
+			}
+			return user.AccountID, nil
+		}
+	}
+
+	return "", fmt.Errorf("user with email %s not found in Jira", assignee)
+}
+
+// ResolveAssigneeWithFallback resolves an assignee using the hierarchy of candidates.
+// It tries each candidate in order until one resolves successfully.
+// If all candidates fail, it returns an error.
+func (c *Client) ResolveAssigneeWithFallback(ctx context.Context, resolver *config.AssigneeResolver, providerName, repo string) (string, error) {
+	candidates := resolver.GetCandidates(providerName, repo)
+
+	if len(candidates) == 0 {
+		return "", nil // No assignee configured
+	}
+
+	for i, candidate := range candidates {
+		accountID, err := c.ResolveAssignee(ctx, candidate)
+		if err == nil {
+			return accountID, nil
+		}
+
+		// Log warning for non-final failures
+		if i < len(candidates)-1 {
+			slog.Warn("assignee lookup failed, trying fallback", "email", candidate, "error", err)
+		}
+	}
+
+	return "", fmt.Errorf("all assignee lookups failed (tried: %v)", candidates)
 }
 
 // FindExistingTicket searches for an existing open ticket with the given vulnerability ID or CVE.

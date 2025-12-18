@@ -18,32 +18,28 @@ func NewAssigneeResolver(cfg *Config) *AssigneeResolver {
 	return &AssigneeResolver{cfg: cfg}
 }
 
-// Resolve returns the Jira assignee account ID for a given provider and repository.
+// Resolve returns the Jira assignee (email or account ID) for a given provider and repository.
 // It checks the hierarchy in order of specificity:
 //  1. Repository-level: matching entry in providers.{provider}.repo_includes with assignee
 //  2. Provider-level: providers.{provider}.jira.assignee
 //  3. Global default: defaults.jira.assignee
 //
 // For repo_includes, both exact matches and pattern matches (using glob syntax) are checked.
-// The returned value is resolved through the users map if it's an alias.
 // Returns an empty string if no assignee is configured at any level.
+// Note: The returned value may be an email that needs resolution via the Jira API.
 func (r *AssigneeResolver) Resolve(providerName, repository string) string {
-	var assignee string
-
 	if provider, exists := r.cfg.Providers[providerName]; exists {
 		// Check repo_includes for GitHub
 		for _, include := range provider.RepoIncludes {
 			if matchRepoPattern(include.Name, repository) && include.Assignee != "" {
-				assignee = include.Assignee
-				return r.cfg.ResolveUserID(assignee)
+				return include.Assignee
 			}
 		}
 
 		// Check project_includes for Snyk
 		for _, include := range provider.ProjectIncludes {
 			if matchRepoPattern(include.Name, repository) && include.Assignee != "" {
-				assignee = include.Assignee
-				return r.cfg.ResolveUserID(assignee)
+				return include.Assignee
 			}
 		}
 	}
@@ -51,13 +47,57 @@ func (r *AssigneeResolver) Resolve(providerName, repository string) string {
 	// Fall back to provider-level override
 	jiraCfg := r.cfg.GetProviderJira(providerName)
 	if jiraCfg.Assignee != "" {
-		assignee = jiraCfg.Assignee
-		return r.cfg.ResolveUserID(assignee)
+		return jiraCfg.Assignee
 	}
 
 	// Fall back to global default
-	assignee = r.cfg.Defaults.Jira.Assignee
-	return r.cfg.ResolveUserID(assignee)
+	return r.cfg.Defaults.Jira.Assignee
+}
+
+// GetCandidates returns the list of assignee candidates in order of specificity.
+// Used for fallback resolution when an assignee email can't be resolved.
+// Returns: [repo-level, provider-level, global-default] (only non-empty values)
+func (r *AssigneeResolver) GetCandidates(providerName, repository string) []string {
+	var candidates []string
+
+	if provider, exists := r.cfg.Providers[providerName]; exists {
+		// Check repo_includes for GitHub
+		for _, include := range provider.RepoIncludes {
+			if matchRepoPattern(include.Name, repository) && include.Assignee != "" {
+				candidates = append(candidates, include.Assignee)
+				break
+			}
+		}
+
+		// Check project_includes for Snyk
+		if len(candidates) == 0 {
+			for _, include := range provider.ProjectIncludes {
+				if matchRepoPattern(include.Name, repository) && include.Assignee != "" {
+					candidates = append(candidates, include.Assignee)
+					break
+				}
+			}
+		}
+	}
+
+	// Provider-level
+	jiraCfg := r.cfg.GetProviderJira(providerName)
+	if jiraCfg.Assignee != "" {
+		// Only add if different from repo-level
+		if len(candidates) == 0 || candidates[len(candidates)-1] != jiraCfg.Assignee {
+			candidates = append(candidates, jiraCfg.Assignee)
+		}
+	}
+
+	// Global default
+	if r.cfg.Defaults.Jira.Assignee != "" {
+		// Only add if different from previous
+		if len(candidates) == 0 || candidates[len(candidates)-1] != r.cfg.Defaults.Jira.Assignee {
+			candidates = append(candidates, r.cfg.Defaults.Jira.Assignee)
+		}
+	}
+
+	return candidates
 }
 
 // matchRepoPattern checks if a repository name matches a pattern.
