@@ -5,8 +5,10 @@ package config
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/viper"
 )
 
@@ -44,12 +46,13 @@ type DefaultsConfig struct {
 
 // JiraConfig contains Jira-specific settings
 type JiraConfig struct {
-	Project    string   `mapstructure:"project"`
-	BoardID    int      `mapstructure:"board_id"`
-	BoardName  string   `mapstructure:"board_name"`
-	Assignee   string   `mapstructure:"assignee"`
-	Labels     []string `mapstructure:"labels"`
-	Components []string `mapstructure:"components"`
+	Project    string            `mapstructure:"project"`
+	BoardID    int               `mapstructure:"board_id"`
+	BoardName  string            `mapstructure:"board_name"`
+	Assignee   string            `mapstructure:"assignee"`
+	Users      map[string]string `mapstructure:"users"` // Maps friendly names to Jira user IDs
+	Labels     []string          `mapstructure:"labels"`
+	Components []string          `mapstructure:"components"`
 }
 
 // ThresholdsConfig contains severity threshold mappings
@@ -67,22 +70,34 @@ type FiltersConfig struct {
 	ExcludePackages []string `mapstructure:"exclude_packages"`
 }
 
+// RepoInclude represents a repository include entry with optional overrides.
+// It can be specified as either a simple string (repo name/pattern) or an object
+// with a name field and optional override fields like assignee.
+type RepoInclude struct {
+	Name     string `mapstructure:"name"`     // Repo name or pattern (e.g., "myorg/api-*")
+	Assignee string `mapstructure:"assignee"` // Optional Jira assignee override
+	// Future: Filters, Labels, etc.
+}
+
+// IsPattern returns true if the Name contains glob pattern characters.
+func (r *RepoInclude) IsPattern() bool {
+	return strings.ContainsAny(r.Name, "*?[]")
+}
+
 // ProviderConfig contains provider-specific configuration
 type ProviderConfig struct {
 	Enabled bool `mapstructure:"enabled"`
 
 	// GitHub-specific
-	Orgs         []string `mapstructure:"orgs"`
-	Repos        []string `mapstructure:"repos"`
-	RepoPatterns []string `mapstructure:"repo_patterns"`
-	ExcludeRepos []string `mapstructure:"exclude_repos"`
+	Orgs         []string      `mapstructure:"orgs"`
+	RepoIncludes []RepoInclude `mapstructure:"repo_includes"` // Repos/patterns to include (with optional overrides)
+	RepoExcludes []string      `mapstructure:"repo_excludes"` // Repos/patterns to exclude
 
 	// Snyk-specific
-	OrgID           string   `mapstructure:"org_id"`
-	ProjectIDs      []string `mapstructure:"project_ids"`
-	ProjectPatterns []string `mapstructure:"project_patterns"`
-	ExcludeProjects []string `mapstructure:"exclude_projects"`
-	APIVersion      string   `mapstructure:"api_version"` // Snyk REST API version (e.g., "2024-10-15")
+	OrgID           string        `mapstructure:"org_id"`
+	ProjectIncludes []RepoInclude `mapstructure:"project_includes"` // Projects/patterns to include
+	ProjectExcludes []string      `mapstructure:"project_excludes"` // Projects/patterns to exclude
+	APIVersion      string        `mapstructure:"api_version"`      // Snyk REST API version (e.g., "2024-10-15")
 
 	// Overrides for defaults
 	Jira    *JiraConfig    `mapstructure:"jira"`
@@ -94,14 +109,77 @@ type ProviderConfig struct {
 func Load() (*Config, error) {
 	var cfg Config
 
-	if err := viper.Unmarshal(&cfg); err != nil {
+	// Configure decoder with custom hook for RepoInclude
+	decodeHook := viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
+		mapstructure.StringToTimeDurationHookFunc(),
+		mapstructure.StringToSliceHookFunc(","),
+		repoIncludeDecodeHook(),
+	))
+
+	if err := viper.Unmarshal(&cfg, decodeHook); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
 	// Set defaults if not specified
 	setDefaults(&cfg)
 
+	// Validate configuration
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
 	return &cfg, nil
+}
+
+// repoIncludeDecodeHook returns a decode hook that handles mixed string/object
+// entries in RepoInclude slices. A string is converted to RepoInclude{Name: string}.
+func repoIncludeDecodeHook() mapstructure.DecodeHookFunc {
+	return func(f reflect.Type, t reflect.Type, data interface{}) (interface{}, error) {
+		// Only handle conversion to RepoInclude
+		if t != reflect.TypeOf(RepoInclude{}) {
+			return data, nil
+		}
+
+		switch v := data.(type) {
+		case string:
+			// Convert simple string to RepoInclude with just Name
+			return RepoInclude{Name: v}, nil
+		case map[string]interface{}:
+			// Let mapstructure handle the struct conversion
+			return data, nil
+		}
+		return data, nil
+	}
+}
+
+// Validate checks the configuration for errors.
+func (c *Config) Validate() error {
+	for name, provider := range c.Providers {
+		// Validate repo_includes format
+		for _, repo := range provider.RepoIncludes {
+			if repo.Name == "" {
+				return fmt.Errorf("provider %s: repo_includes entry has empty name", name)
+			}
+			if !strings.Contains(repo.Name, "/") {
+				return fmt.Errorf("provider %s: repo %q must be in org/repo format (e.g., 'myorg/myrepo')", name, repo.Name)
+			}
+		}
+
+		// Validate repo_excludes format
+		for _, pattern := range provider.RepoExcludes {
+			if !strings.Contains(pattern, "/") {
+				return fmt.Errorf("provider %s: exclude %q must be in org/repo format", name, pattern)
+			}
+		}
+
+		// Validate project_includes format (for Snyk)
+		for _, project := range provider.ProjectIncludes {
+			if project.Name == "" {
+				return fmt.Errorf("provider %s: project_includes entry has empty name", name)
+			}
+		}
+	}
+	return nil
 }
 
 // setDefaults ensures all required fields have sensible defaults
@@ -225,4 +303,17 @@ func (c *Config) NormalizeSeverity(severity string) string {
 		return mapped
 	}
 	return severity
+}
+
+// ResolveUserID converts a user alias to a Jira user ID.
+// If the alias exists in the users map, returns the mapped ID.
+// Otherwise returns the input unchanged (assumes it's already a Jira ID).
+func (c *Config) ResolveUserID(alias string) string {
+	if alias == "" {
+		return ""
+	}
+	if id, exists := c.Defaults.Jira.Users[alias]; exists {
+		return id
+	}
+	return alias
 }

@@ -17,9 +17,8 @@ import (
 type GitHubProvider struct {
 	client           *github.Client
 	orgs             []string
-	repos            []string
-	repoPatterns     []string
-	excludeRepos     []string
+	repoIncludes     []config.RepoInclude
+	repoExcludes     []string
 	filter           *filter.Filter
 	severityMappings map[string]string
 	verbose          bool
@@ -46,9 +45,8 @@ func NewGitHubProvider(token string, cfg config.ProviderConfig, filters config.F
 	return &GitHubProvider{
 		client:           client,
 		orgs:             cfg.Orgs,
-		repos:            cfg.Repos,
-		repoPatterns:     cfg.RepoPatterns,
-		excludeRepos:     cfg.ExcludeRepos,
+		repoIncludes:     cfg.RepoIncludes,
+		repoExcludes:     cfg.RepoExcludes,
 		filter:           filter.New(filters),
 		severityMappings: severityMappings,
 		verbose:          verbose,
@@ -104,19 +102,23 @@ func (p *GitHubProvider) FetchVulnerabilities(ctx context.Context) ([]Vulnerabil
 func (p *GitHubProvider) getRepositories(ctx context.Context) ([]string, error) {
 	var repos []string
 
-	// If specific repos are configured, use those
-	if len(p.repos) > 0 {
-		for _, repo := range p.repos {
-			// If repo doesn't contain '/', prepend the first org
-			if !strings.Contains(repo, "/") && len(p.orgs) > 0 {
-				repo = fmt.Sprintf("%s/%s", p.orgs[0], repo)
+	// If repo_includes is specified, only include matching repos
+	if len(p.repoIncludes) > 0 {
+		// Fetch all repos from orgs to match against patterns
+		allOrgRepos, err := p.getAllOrgRepos(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, fullName := range allOrgRepos {
+			if p.matchesInclude(fullName) && !p.matchesExclude(fullName) {
+				repos = append(repos, fullName)
 			}
-			repos = append(repos, repo)
 		}
 		return repos, nil
 	}
 
-	// Otherwise, get repos from configured orgs
+	// Otherwise, get all repos from configured orgs (apply excludes only)
 	for _, org := range p.orgs {
 		orgRepos, err := p.getOrgRepositories(ctx, org)
 		if err != nil {
@@ -126,11 +128,7 @@ func (p *GitHubProvider) getRepositories(ctx context.Context) ([]string, error) 
 		for _, repo := range orgRepos {
 			fullName := fmt.Sprintf("%s/%s", org, repo)
 
-			if p.isExcluded(repo) {
-				continue
-			}
-
-			if len(p.repoPatterns) > 0 && !p.matchesPattern(repo) {
+			if p.matchesExclude(fullName) {
 				continue
 			}
 
@@ -139,6 +137,41 @@ func (p *GitHubProvider) getRepositories(ctx context.Context) ([]string, error) 
 	}
 
 	return repos, nil
+}
+
+// getAllOrgRepos fetches all repositories from all configured orgs
+func (p *GitHubProvider) getAllOrgRepos(ctx context.Context) ([]string, error) {
+	var allRepos []string
+	for _, org := range p.orgs {
+		orgRepos, err := p.getOrgRepositories(ctx, org)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get repos for org %s: %w", org, err)
+		}
+		for _, repo := range orgRepos {
+			allRepos = append(allRepos, fmt.Sprintf("%s/%s", org, repo))
+		}
+	}
+	return allRepos, nil
+}
+
+// matchesInclude checks if a repo matches any of the repo_includes entries
+func (p *GitHubProvider) matchesInclude(fullName string) bool {
+	for _, include := range p.repoIncludes {
+		if filter.MatchPattern(include.Name, fullName) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesExclude checks if a repo matches any of the repo_excludes patterns
+func (p *GitHubProvider) matchesExclude(fullName string) bool {
+	for _, pattern := range p.repoExcludes {
+		if filter.MatchPattern(pattern, fullName) {
+			return true
+		}
+	}
+	return false
 }
 
 // getOrgRepositories fetches all repositories for an organization
@@ -262,24 +295,4 @@ func (p *GitHubProvider) alertToVulnerability(repo string, alert *github.Dependa
 	}
 
 	return v
-}
-
-// isExcluded checks if a repo is in the exclusion list
-func (p *GitHubProvider) isExcluded(repo string) bool {
-	for _, excluded := range p.excludeRepos {
-		if strings.EqualFold(excluded, repo) {
-			return true
-		}
-	}
-	return false
-}
-
-// matchesPattern checks if a repo matches any of the configured patterns
-func (p *GitHubProvider) matchesPattern(repo string) bool {
-	for _, pattern := range p.repoPatterns {
-		if filter.MatchPattern(pattern, repo) {
-			return true
-		}
-	}
-	return false
 }

@@ -27,6 +27,17 @@ type MergedVulnerability struct {
 	// Aggregated info from all detections
 	Providers    []string // e.g., ["github", "snyk"]
 	Repositories []string // all repos where detected
+
+	// Assignee is the resolved Jira assignee account ID for this vulnerability.
+	// When using MergeWithAssignees, vulnerabilities with different assignees
+	// are kept as separate MergedVulnerability instances.
+	Assignee string
+}
+
+// AssigneeResolver is the interface for resolving assignees based on provider and repository.
+// This allows the merge logic to remain decoupled from the config package.
+type AssigneeResolver interface {
+	Resolve(providerName, repository string) string
 }
 
 // Merge combines vulnerabilities from multiple providers.
@@ -93,6 +104,86 @@ func Merge(vulns []provider.Vulnerability) []MergedVulnerability {
 	}
 
 	return result
+}
+
+// MergeWithAssignees combines vulnerabilities with assignee-aware grouping.
+// Unlike Merge, this function groups by (CVE, Assignee), so the same CVE
+// in repositories with different assignees results in separate MergedVulnerability
+// instances - enabling separate Jira tickets per assignee.
+//
+// The resolver is called for each vulnerability to determine its assignee based
+// on the provider and repository. Vulnerabilities with the same CVE (or fallback key)
+// and same assignee are merged together.
+func MergeWithAssignees(vulns []provider.Vulnerability, resolver AssigneeResolver) []MergedVulnerability {
+	byKey := make(map[string]*MergedVulnerability)
+
+	for _, v := range vulns {
+		assignee := resolver.Resolve(v.Provider, v.Repository)
+		key := dedupeKeyWithAssignee(v, assignee)
+
+		if existing, ok := byKey[key]; ok {
+			// Add provider if not already present
+			existing.Providers = appendUnique(existing.Providers, v.Provider)
+			// Add repository if not already present
+			existing.Repositories = appendUnique(existing.Repositories, v.Repository)
+
+			// Keep the higher CVSS score
+			if v.CVSS > existing.CVSS {
+				existing.CVSS = v.CVSS
+			}
+
+			// Prefer non-empty fixed version
+			if existing.FixedVersion == "" && v.FixedVersion != "" {
+				existing.FixedVersion = v.FixedVersion
+			}
+
+			// Keep earliest discovery date
+			if v.DiscoveredAt.Before(existing.DiscoveredAt) {
+				existing.DiscoveredAt = v.DiscoveredAt
+			}
+
+			// Prefer longer description
+			if len(v.Description) > len(existing.Description) {
+				existing.Description = v.Description
+			}
+
+			// Prefer non-empty URL
+			if existing.URL == "" && v.URL != "" {
+				existing.URL = v.URL
+			}
+		} else {
+			byKey[key] = &MergedVulnerability{
+				ID:           v.ID,
+				CVE:          v.CVE,
+				Severity:     v.Severity,
+				CVSS:         v.CVSS,
+				Package:      v.Package,
+				Version:      v.Version,
+				FixedVersion: v.FixedVersion,
+				Description:  v.Description,
+				URL:          v.URL,
+				DiscoveredAt: v.DiscoveredAt,
+				Providers:    []string{v.Provider},
+				Repositories: []string{v.Repository},
+				Assignee:     assignee,
+			}
+		}
+	}
+
+	// Convert map to slice
+	result := make([]MergedVulnerability, 0, len(byKey))
+	for _, v := range byKey {
+		result = append(result, *v)
+	}
+
+	return result
+}
+
+// dedupeKeyWithAssignee returns a unique key that includes the assignee.
+// This ensures vulnerabilities with different assignees are kept separate.
+func dedupeKeyWithAssignee(v provider.Vulnerability, assignee string) string {
+	baseKey := dedupeKey(v)
+	return baseKey + "|" + assignee
 }
 
 // dedupeKey returns a unique key for deduplication

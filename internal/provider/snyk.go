@@ -26,14 +26,13 @@ const (
 
 // SnykProvider fetches vulnerabilities from Snyk
 type SnykProvider struct {
-	client           *http.Client
-	token            string
-	orgID            string
-	apiVersion       string
-	projectIDs       []string
-	projectPatterns  []string
-	excludeProjects  []string
-	filter           *filter.Filter
+	client          *http.Client
+	token           string
+	orgID           string
+	apiVersion      string
+	projectIncludes []config.RepoInclude
+	projectExcludes []string
+	filter          *filter.Filter
 	severityMappings map[string]string
 	verbose          bool
 }
@@ -120,14 +119,13 @@ func NewSnykProvider(token string, cfg config.ProviderConfig, filters config.Fil
 	}
 
 	return &SnykProvider{
-		client:           &http.Client{Timeout: HTTPTimeout},
-		token:            token,
-		orgID:            cfg.OrgID,
-		apiVersion:       apiVersion,
-		projectIDs:       cfg.ProjectIDs,
-		projectPatterns:  cfg.ProjectPatterns,
-		excludeProjects:  cfg.ExcludeProjects,
-		filter:           filter.New(filters),
+		client:          &http.Client{Timeout: HTTPTimeout},
+		token:           token,
+		orgID:           cfg.OrgID,
+		apiVersion:      apiVersion,
+		projectIncludes: cfg.ProjectIncludes,
+		projectExcludes: cfg.ProjectExcludes,
+		filter:          filter.New(filters),
 		severityMappings: severityMappings,
 		verbose:          verbose,
 	}, nil
@@ -180,15 +178,6 @@ func (p *SnykProvider) FetchVulnerabilities(ctx context.Context) ([]Vulnerabilit
 
 // getProjects returns the list of projects to check using the REST API
 func (p *SnykProvider) getProjects(ctx context.Context) ([]snykProject, error) {
-	// If specific project IDs are configured, use those
-	if len(p.projectIDs) > 0 {
-		var projects []snykProject
-		for _, id := range p.projectIDs {
-			projects = append(projects, snykProject{ID: id, Name: id})
-		}
-		return projects, nil
-	}
-
 	// Use REST API to get all projects in the org
 	url := fmt.Sprintf("%s/orgs/%s/projects?version=%s&limit=%d", snykRESTBaseURL, p.orgID, p.apiVersion, APIPageSize)
 
@@ -252,26 +241,46 @@ func (p *SnykProvider) getProjects(ctx context.Context) ([]snykProject, error) {
 	var filteredProjects []snykProject
 	for _, project := range allProjects {
 		// Check exclusions first
-		if p.isProjectExcluded(project.Name) {
+		if p.matchesExclude(project.Name) {
 			if p.verbose {
 				slog.Info("excluding project", "project", project.Name)
 			}
 			continue
 		}
 
-		// Check patterns (if configured)
-		if len(p.projectPatterns) > 0 && !p.matchesProjectPattern(project.Name) {
+		// If includes are specified, only include matching projects
+		if len(p.projectIncludes) > 0 && !p.matchesInclude(project.Name) {
 			continue
 		}
 
 		filteredProjects = append(filteredProjects, project)
 	}
 
-	if p.verbose && len(p.projectPatterns) > 0 || len(p.excludeProjects) > 0 {
+	if p.verbose && (len(p.projectIncludes) > 0 || len(p.projectExcludes) > 0) {
 		slog.Info("filtered projects", "total", len(allProjects), "matched", len(filteredProjects))
 	}
 
 	return filteredProjects, nil
+}
+
+// matchesInclude checks if a project matches any of the project_includes entries
+func (p *SnykProvider) matchesInclude(projectName string) bool {
+	for _, include := range p.projectIncludes {
+		if filter.MatchPattern(include.Name, projectName) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesExclude checks if a project matches any of the project_excludes patterns
+func (p *SnykProvider) matchesExclude(projectName string) bool {
+	for _, pattern := range p.projectExcludes {
+		if filter.MatchPattern(pattern, projectName) {
+			return true
+		}
+	}
+	return false
 }
 
 // getIssuesForProject fetches issues for a specific project using v1 API
@@ -353,24 +362,4 @@ func (p *SnykProvider) issueToVulnerability(project snykProject, issue snykIssue
 	}
 
 	return v
-}
-
-// isProjectExcluded checks if a project name is in the exclusion list
-func (p *SnykProvider) isProjectExcluded(projectName string) bool {
-	for _, excluded := range p.excludeProjects {
-		if strings.EqualFold(excluded, projectName) {
-			return true
-		}
-	}
-	return false
-}
-
-// matchesProjectPattern checks if a project name matches any of the configured patterns
-func (p *SnykProvider) matchesProjectPattern(projectName string) bool {
-	for _, pattern := range p.projectPatterns {
-		if filter.MatchPattern(pattern, projectName) {
-			return true
-		}
-	}
-	return false
 }

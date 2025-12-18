@@ -37,7 +37,14 @@ defaults:
   jira:
     project: "SEC"
     board_name: "Security Team Board"
-    assignee: "default-user"
+    # User aliases map friendly names to Jira account IDs
+    # Use these aliases anywhere an assignee is needed
+    users:
+      default-user: "712020:abc12345-1234-5678-90ab-cdef01234567"
+      security-lead: "712021:def12345-1234-5678-90ab-cdef01234567"
+      frontend-lead: "712022:ghi12345-1234-5678-90ab-cdef01234567"
+      backend-lead: "712023:jkl12345-1234-5678-90ab-cdef01234567"
+    assignee: "default-user"  # Tier 1: Global default (uses alias from users map)
     labels:
       - security
       - vulnerability
@@ -56,17 +63,34 @@ defaults:
     cvss_min: 4.0
 
 # Provider-specific configs (override defaults)
+#
+# Assignee hierarchy (most specific wins):
+#   1. defaults.jira.assignee              - Global fallback
+#   2. providers.{name}.jira.assignee      - Provider-level override
+#   3. providers.{name}.repo_includes      - Repository-level override (in entry with assignee)
+#
+# When the same CVE is found in repos with different assignees,
+# separate Jira tickets are created (one per assignee).
 providers:
   github:
     enabled: true
     orgs:
       - your-org
-    repos: []  # Empty = all repos in org
-    repo_patterns: []  # e.g., ["argus-*", "api-*"]
-    exclude_repos:
-      - archived-repo
+    # repo_includes: Include specific repos/patterns with optional overrides
+    # - String entries: just the repo name/pattern (e.g., "your-org/api-*")
+    # - Object entries: repo with assignee override
+    # If empty, all repos from orgs are scanned.
+    repo_includes:
+      - "your-org/api-*"              # Pattern: all api-* repos
+      - name: "your-org/frontend"     # Repo with assignee override
+        assignee: "frontend-lead"     # Uses alias from users map
+      - name: "your-org/backend"
+        assignee: "backend-lead"      # Uses alias from users map
+    # repo_excludes: Exclude repos/patterns (supports glob patterns)
+    repo_excludes:
+      - "your-org/archived-*"
     jira:
-      assignee: "github-security-lead"
+      assignee: "security-lead"  # Tier 2: Provider-level override (uses alias)
       labels:
         - security
         - dependabot
@@ -78,9 +102,13 @@ providers:
   snyk:
     enabled: true
     org_id: "your-snyk-org-id"
-    project_ids: []  # Empty = all projects
+    # project_includes: Include specific projects/patterns with optional overrides
+    # If empty, all projects in the org are scanned.
+    project_includes: []
+    # project_excludes: Exclude projects/patterns
+    project_excludes: []
     jira:
-      assignee: "snyk-security-lead"
+      assignee: "snyk-security-lead"  # Tier 2: Provider-level override
       labels:
         - security
         - snyk
