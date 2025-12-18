@@ -1,0 +1,17 @@
+apiVersion: v2
+name: argus
+description: A Helm chart for Argus - sync security vulnerabilities to Jira
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - security
+  - vulnerabilities
+  - jira
+  - dependabot
+  - snyk
+home: https://github.com/sentiolabs/argus
+sources:
+  - https://github.com/sentiolabs/argus
+maintainers:
+  - name: SentioLabs

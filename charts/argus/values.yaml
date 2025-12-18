@@ -1,0 +1,113 @@
+# Argus Helm Chart Values
+
+image:
+  repository: ghcr.io/sentiolabs/argus
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# CronJob schedule (default: every 6 hours)
+schedule: "0 */6 * * *"
+
+# Additional arguments to pass to argus
+args:
+  - sync
+
+# Set to true for dry-run mode
+dryRun: false
+
+# Enable verbose logging
+verbose: false
+
+# Credentials (required)
+# These will be stored in a Kubernetes Secret
+credentials:
+  # GitHub personal access token
+  githubToken: ""
+  # Snyk API token
+  snykToken: ""
+  # Jira instance URL
+  jiraUrl: ""
+  # Jira username/email
+  jiraUsername: ""
+  # Jira API token
+  jiraToken: ""
+
+# Use existing secret instead of creating one
+# Secret must contain: ARGUS_GITHUB_TOKEN, ARGUS_SNYK_TOKEN,
+# ARGUS_JIRA_URL, ARGUS_JIRA_USERNAME, ARGUS_JIRA_TOKEN
+existingSecret: ""
+
+# Argus configuration (will be mounted as .argus.yaml)
+config:
+  defaults:
+    jira:
+      project: "SEC"
+      board_name: "Security Team Board"
+      labels:
+        - security
+        - vulnerability
+    thresholds:
+      priority:
+        critical: "Highest"
+        high: "High"
+        medium: "Medium"
+        low: "Low"
+      sprint_min_severity: "high"
+    filters:
+      min_severity: "medium"
+      max_age_days: 90
+    # Severity mappings normalize provider-specific values to Argus's canonical levels
+    # Default: moderate → medium (for GitHub Dependabot compatibility)
+    # severity_mappings:
+    #   moderate: medium
+
+  providers:
+    github:
+      enabled: true
+      orgs: []
+      repos: []
+      exclude_repos: []
+      filters:
+        min_severity: "medium"
+    snyk:
+      enabled: false
+      org_id: ""
+      project_patterns: []
+      exclude_projects: []
+      filters:
+        min_severity: "high"
+
+# Job settings
+job:
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+
+# CronJob settings
+concurrencyPolicy: Forbid
+successfulJobsHistoryLimit: 3
+failedJobsHistoryLimit: 3
+suspend: false
+
+# Pod resources
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Node selection
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Pod annotations
+podAnnotations: {}
+
+# Service account
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
