@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.2] - 2025-12-18
+
+### Bug Fixes
+
+- Changing runners to 2cpu
+
 ## [0.1.1] - 2025-12-18
 
 ### Bug Fixes
