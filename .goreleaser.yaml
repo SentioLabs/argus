@@ -57,7 +57,7 @@ changelog:
 
 release:
   github:
-    owner: sentiolabs
+    owner: SentioLabs
     name: argus
   draft: false
   prerelease: auto
