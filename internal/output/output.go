@@ -13,17 +13,18 @@ import (
 
 // SyncResult represents the result of processing a vulnerability
 type SyncResult struct {
-	Provider   string `json:"provider"`
-	VulnID     string `json:"vuln_id"`
-	CVE        string `json:"cve,omitempty"`
-	Severity   string `json:"severity"`
-	Package    string `json:"package"`
-	Repository string `json:"repository"`
-	Action     string `json:"action"`
-	Status     string `json:"status"`
-	JiraKey    string `json:"jira_key,omitempty"`
-	Assignee   string `json:"assignee,omitempty"`
-	Error      string `json:"error,omitempty"`
+	Provider      string `json:"provider"`
+	VulnID        string `json:"vuln_id"`
+	CVE           string `json:"cve,omitempty"`
+	Severity      string `json:"severity"`
+	Package       string `json:"package"`
+	Repository    string `json:"repository"`
+	Action        string `json:"action"`
+	Status        string `json:"status"`
+	JiraKey       string `json:"jira_key,omitempty"`
+	Assignee      string `json:"assignee,omitempty"`
+	JiraAccountID string `json:"jira_account_id,omitempty"`
+	Error         string `json:"error,omitempty"`
 }
 
 // Summary represents aggregated sync statistics
@@ -95,9 +96,9 @@ func printTable(output Output) error {
 
 	table := tablewriter.NewTable(os.Stdout)
 
-	// Show JIRA column only when not in dry-run mode
+	// Show JIRA ID column in dry-run mode, JIRA KEY column in normal mode
 	if output.DryRun {
-		table.Header("Provider", "Severity", "CVE/ID", "Package", "Repository", "Action", "Assignee")
+		table.Header("Provider", "Severity", "CVE/ID", "Package", "Repository", "Action", "Assignee", "Jira ID")
 	} else {
 		table.Header("Provider", "Severity", "CVE/ID", "Package", "Repository", "Action", "Assignee", "Jira")
 	}
@@ -114,6 +115,10 @@ func printTable(output Output) error {
 		}
 
 		if output.DryRun {
+			jiraID := r.JiraAccountID
+			if jiraID == "" && r.Error != "" {
+				jiraID = "ERROR"
+			}
 			table.Append(
 				r.Provider,
 				r.Severity,
@@ -122,6 +127,7 @@ func printTable(output Output) error {
 				truncate(r.Repository, 30),
 				r.Action,
 				assignee,
+				truncate(jiraID, 20),
 			)
 		} else {
 			table.Append(

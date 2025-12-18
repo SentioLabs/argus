@@ -101,12 +101,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 	merged := vuln.MergeWithAssignees(allVulns, resolver)
 	slog.Info("merged vulnerabilities", "total", len(allVulns), "unique", len(merged))
 
-	// Process merged vulnerabilities
-	if GetDryRun() {
-		return outputDryRun(merged)
-	}
-
-	// Initialize Jira client
+	// Initialize Jira client (needed for both dry-run and normal mode to resolve assignees)
 	jiraClient, err := jira.NewClient(
 		cfg.JiraURL,
 		cfg.JiraUsername,
@@ -117,6 +112,11 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create Jira client: %w", err)
 	}
 
+	// Process merged vulnerabilities
+	if GetDryRun() {
+		return outputDryRun(ctx, jiraClient, resolver, merged)
+	}
+
 	results, err := processMergedVulnerabilities(ctx, cfg, jiraClient, resolver, merged)
 	if err != nil {
 		return fmt.Errorf("failed to process vulnerabilities: %w", err)
@@ -125,10 +125,10 @@ func runSync(cmd *cobra.Command, args []string) error {
 	return output.Print(results, GetOutput(), false)
 }
 
-func outputDryRun(merged []vuln.MergedVulnerability) error {
+func outputDryRun(ctx context.Context, jiraClient *jira.Client, resolver *config.AssigneeResolver, merged []vuln.MergedVulnerability) error {
 	var results []output.SyncResult
 	for _, v := range merged {
-		results = append(results, output.SyncResult{
+		result := output.SyncResult{
 			Provider:   v.ProvidersString(),
 			VulnID:     v.ID,
 			CVE:        v.CVE,
@@ -137,8 +137,19 @@ func outputDryRun(merged []vuln.MergedVulnerability) error {
 			Repository: v.RepositoriesString(),
 			Action:     "would_create",
 			Status:     "dry_run",
-			Assignee:   v.Assignee, // Email or account ID (not resolved in dry-run)
-		})
+			Assignee:   v.Assignee,
+		}
+
+		// Resolve assignee email to Jira account ID for validation
+		accountID, err := jiraClient.ResolveAssigneeWithFallback(ctx, resolver, v.Providers[0], v.Repositories[0])
+		if err != nil {
+			result.Error = err.Error()
+			slog.Warn("failed to resolve assignee", "email", v.Assignee, "error", err)
+		} else {
+			result.JiraAccountID = accountID
+		}
+
+		results = append(results, result)
 	}
 	return output.Print(results, GetOutput(), true)
 }
