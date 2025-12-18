@@ -104,6 +104,13 @@ func (c *Client) ResolveAssignee(ctx context.Context, assignee string) (string, 
 		return "", fmt.Errorf("failed to lookup user %s: %w", assignee, err)
 	}
 
+	if c.verbose {
+		slog.Debug("user search returned", "query", assignee, "count", len(users))
+		for i, u := range users {
+			slog.Debug("user result", "index", i, "accountID", u.AccountID, "email", u.EmailAddress, "displayName", u.DisplayName)
+		}
+	}
+
 	// Find exact email match (Find() does partial matching)
 	for _, user := range users {
 		if strings.EqualFold(user.EmailAddress, assignee) {
@@ -115,7 +122,18 @@ func (c *Client) ResolveAssignee(ctx context.Context, assignee string) (string, 
 		}
 	}
 
-	return "", fmt.Errorf("user with email %s not found in Jira", assignee)
+	// If no email match but we have exactly one result, use it
+	// (Jira Cloud may hide emails for privacy, but the search matched)
+	if len(users) == 1 {
+		user := users[0]
+		c.emailCache[assignee] = user.AccountID
+		if c.verbose {
+			slog.Debug("using single search result (email hidden)", "query", assignee, "accountID", user.AccountID, "displayName", user.DisplayName)
+		}
+		return user.AccountID, nil
+	}
+
+	return "", fmt.Errorf("user with email %s not found in Jira (found %d results, need exact match)", assignee, len(users))
 }
 
 // ResolveAssigneeWithFallback resolves an assignee using the hierarchy of candidates.
