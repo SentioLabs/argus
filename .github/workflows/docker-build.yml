@@ -39,6 +39,10 @@ jobs:
             type=sha,prefix=
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=CLI tool that syncs security vulnerabilities from providers/services to Jira
+            org.opencontainers.image.licenses=MIT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
