@@ -153,9 +153,20 @@ func runConfigValidate(cmd *cobra.Command, args []string) error {
 	fmt.Println("Configuration is valid!")
 	fmt.Printf("\nDefaults:\n")
 	fmt.Printf("  Jira Project: %s\n", cfg.Defaults.Jira.Project)
-	fmt.Printf("  Board Name: %s\n", cfg.Defaults.Jira.BoardName)
+	if cfg.Defaults.Jira.BoardName != "" {
+		fmt.Printf("  Board Name: %s\n", cfg.Defaults.Jira.BoardName)
+	} else if cfg.Defaults.Jira.BoardID > 0 {
+		fmt.Printf("  Board ID: %d\n", cfg.Defaults.Jira.BoardID)
+	}
 	fmt.Printf("  Sprint Min Severity: %s\n", cfg.Defaults.Thresholds.SprintMinSeverity)
 	fmt.Printf("  Filter Min Severity: %s\n", cfg.Defaults.Filters.MinSeverity)
+
+	if len(cfg.Defaults.Jira.Users) > 0 {
+		fmt.Printf("\nUsers:\n")
+		for name := range cfg.Defaults.Jira.Users {
+			fmt.Printf("  - %s\n", name)
+		}
+	}
 
 	fmt.Printf("\nProviders:\n")
 	for name, provider := range cfg.Providers {
@@ -164,6 +175,22 @@ func runConfigValidate(cmd *cobra.Command, args []string) error {
 			status = "enabled"
 		}
 		fmt.Printf("  %s: %s\n", name, status)
+
+		// Show repos for GitHub
+		if len(provider.RepoIncludes) > 0 {
+			fmt.Printf("    repos:\n")
+			for _, repo := range provider.RepoIncludes {
+				fmt.Printf("      - %s\n", repo.Name)
+			}
+		}
+
+		// Show projects for Snyk
+		if len(provider.ProjectIncludes) > 0 {
+			fmt.Printf("    projects:\n")
+			for _, project := range provider.ProjectIncludes {
+				fmt.Printf("      - %s\n", project.Name)
+			}
+		}
 	}
 
 	// Check for required environment variables

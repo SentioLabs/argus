@@ -22,6 +22,7 @@ type SyncResult struct {
 	Action     string `json:"action"`
 	Status     string `json:"status"`
 	JiraKey    string `json:"jira_key,omitempty"`
+	Assignee   string `json:"assignee,omitempty"`
 	Error      string `json:"error,omitempty"`
 }
 
@@ -93,7 +94,13 @@ func printTable(output Output) error {
 	}
 
 	table := tablewriter.NewTable(os.Stdout)
-	table.Header("Provider", "Severity", "CVE/ID", "Package", "Repository", "Action", "Jira")
+
+	// Show JIRA column only when not in dry-run mode
+	if output.DryRun {
+		table.Header("Provider", "Severity", "CVE/ID", "Package", "Repository", "Action", "Assignee")
+	} else {
+		table.Header("Provider", "Severity", "CVE/ID", "Package", "Repository", "Action", "Assignee", "Jira")
+	}
 
 	for _, r := range output.Results {
 		vulnID := r.CVE
@@ -101,20 +108,33 @@ func printTable(output Output) error {
 			vulnID = r.VulnID
 		}
 
-		jiraKey := r.JiraKey
+		assignee := r.Assignee
 		if r.Error != "" {
-			jiraKey = "ERROR"
+			assignee = "ERROR"
 		}
 
-		table.Append(
-			r.Provider,
-			r.Severity,
-			truncate(vulnID, 20),
-			truncate(r.Package, 25),
-			truncate(r.Repository, 30),
-			r.Action,
-			jiraKey,
-		)
+		if output.DryRun {
+			table.Append(
+				r.Provider,
+				r.Severity,
+				truncate(vulnID, 20),
+				truncate(r.Package, 25),
+				truncate(r.Repository, 30),
+				r.Action,
+				assignee,
+			)
+		} else {
+			table.Append(
+				r.Provider,
+				r.Severity,
+				truncate(vulnID, 20),
+				truncate(r.Package, 25),
+				truncate(r.Repository, 30),
+				r.Action,
+				assignee,
+				r.JiraKey,
+			)
+		}
 	}
 
 	table.Render()

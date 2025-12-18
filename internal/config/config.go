@@ -317,3 +317,18 @@ func (c *Config) ResolveUserID(alias string) string {
 	}
 	return alias
 }
+
+// GetUserAlias returns the alias for a Jira user ID.
+// If the ID matches a user in the users map, returns the alias.
+// Otherwise returns the input unchanged.
+func (c *Config) GetUserAlias(jiraID string) string {
+	if jiraID == "" {
+		return ""
+	}
+	for alias, id := range c.Defaults.Jira.Users {
+		if id == jiraID {
+			return alias
+		}
+	}
+	return jiraID
+}

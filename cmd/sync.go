@@ -93,13 +93,17 @@ func runSync(cmd *cobra.Command, args []string) error {
 		slog.Warn("some providers failed", "count", len(fetchErrs), "errors", fetchErrs)
 	}
 
-	// Merge/dedupe vulnerabilities by CVE
-	merged := vuln.Merge(allVulns)
+	// Create assignee resolver for the three-tier hierarchy
+	resolver := config.NewAssigneeResolver(cfg)
+
+	// Merge/dedupe vulnerabilities by CVE and assignee
+	// Same CVE in repos with different assignees = separate tickets
+	merged := vuln.MergeWithAssignees(allVulns, resolver)
 	slog.Info("merged vulnerabilities", "total", len(allVulns), "unique", len(merged))
 
 	// Process merged vulnerabilities
 	if GetDryRun() {
-		return outputDryRun(merged)
+		return outputDryRun(cfg, merged)
 	}
 
 	// Initialize Jira client
@@ -121,7 +125,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 	return output.Print(results, GetOutput(), false)
 }
 
-func outputDryRun(merged []vuln.MergedVulnerability) error {
+func outputDryRun(cfg *config.Config, merged []vuln.MergedVulnerability) error {
 	var results []output.SyncResult
 	for _, v := range merged {
 		results = append(results, output.SyncResult{
@@ -133,6 +137,7 @@ func outputDryRun(merged []vuln.MergedVulnerability) error {
 			Repository: v.RepositoriesString(),
 			Action:     "would_create",
 			Status:     "dry_run",
+			Assignee:   cfg.GetUserAlias(v.Assignee),
 		})
 	}
 	return output.Print(results, GetOutput(), true)
@@ -145,9 +150,11 @@ func processMergedVulnerabilities(
 	merged []vuln.MergedVulnerability,
 ) ([]output.SyncResult, error) {
 	var results []output.SyncResult
-	jiraCfg := cfg.Defaults.Jira
 
 	for _, v := range merged {
+		// Get base Jira config from first provider, then override with pre-resolved assignee
+		jiraCfg := cfg.GetProviderJira(v.Providers[0])
+		jiraCfg.Assignee = v.Assignee
 		result := output.SyncResult{
 			Provider:   v.ProvidersString(),
 			VulnID:     v.ID,
@@ -155,6 +162,7 @@ func processMergedVulnerabilities(
 			Severity:   v.Severity,
 			Package:    v.Package,
 			Repository: v.RepositoriesString(),
+			Assignee:   cfg.GetUserAlias(v.Assignee),
 		}
 
 		// Check for existing ticket
