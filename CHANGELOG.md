@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1] - 2025-12-18
+
+### Bug Fixes
+
+- Updating to use blacksmith runner for releases
+- Updating ghcr visibility to match repo
+
 ## [0.1.0] - 2025-12-18
 
 ### Bug Fixes
