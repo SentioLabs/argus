@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sentiolabs/patrol/internal/config"
+	"github.com/sentiolabs/argus/internal/config"
 )
 
 // testVulnerability is a test-local type implementing Filterable interface

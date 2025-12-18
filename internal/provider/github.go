@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/google/go-github/v57/github"
-	"github.com/sentiolabs/patrol/internal/config"
-	"github.com/sentiolabs/patrol/internal/filter"
+	"github.com/sentiolabs/argus/internal/config"
+	"github.com/sentiolabs/argus/internal/filter"
 	"golang.org/x/oauth2"
 )
 
@@ -28,7 +28,7 @@ type GitHubProvider struct {
 // NewGitHubProvider creates a new GitHub Dependabot provider
 func NewGitHubProvider(token string, cfg config.ProviderConfig, filters config.FiltersConfig, severityMappings map[string]string, verbose bool) (*GitHubProvider, error) {
 	if token == "" {
-		return nil, fmt.Errorf("PATROL_GITHUB_TOKEN environment variable is required")
+		return nil, fmt.Errorf("ARGUS_GITHUB_TOKEN environment variable is required")
 	}
 
 	ts := oauth2.StaticTokenSource(

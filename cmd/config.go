@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sentiolabs/patrol/internal/config"
+	"github.com/sentiolabs/argus/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -31,7 +31,7 @@ func init() {
 	configCmd.AddCommand(configValidateCmd)
 }
 
-const exampleConfig = `# Patrol Configuration
+const exampleConfig = `# Argus Configuration
 # Base provider config (inherited by all providers)
 defaults:
   jira:
@@ -62,7 +62,7 @@ providers:
     orgs:
       - your-org
     repos: []  # Empty = all repos in org
-    repo_patterns: []  # e.g., ["patrol-*", "api-*"]
+    repo_patterns: []  # e.g., ["argus-*", "api-*"]
     exclude_repos:
       - archived-repo
     jira:
@@ -88,15 +88,15 @@ providers:
       min_severity: "high"  # Override default
 
 # Environment variables required:
-# PATROL_GITHUB_TOKEN  - GitHub personal access token
-# PATROL_SNYK_TOKEN    - Snyk API token
-# PATROL_JIRA_URL      - Jira instance URL (e.g., https://your-domain.atlassian.net)
-# PATROL_JIRA_USERNAME - Jira username/email
-# PATROL_JIRA_TOKEN    - Jira API token
+# ARGUS_GITHUB_TOKEN  - GitHub personal access token
+# ARGUS_SNYK_TOKEN    - Snyk API token
+# ARGUS_JIRA_URL      - Jira instance URL (e.g., https://your-domain.atlassian.net)
+# ARGUS_JIRA_USERNAME - Jira username/email
+# ARGUS_JIRA_TOKEN    - Jira API token
 `
 
 func runConfigInit(cmd *cobra.Command, args []string) error {
-	filename := ".patrol.yaml"
+	filename := ".argus.yaml"
 
 	// Check if file already exists
 	if _, err := os.Stat(filename); err == nil {
@@ -111,7 +111,7 @@ func runConfigInit(cmd *cobra.Command, args []string) error {
 	fmt.Println("\nNext steps:")
 	fmt.Println("1. Edit the configuration file with your settings")
 	fmt.Println("2. Set required environment variables")
-	fmt.Println("3. Run 'patrol sync --dry-run' to preview")
+	fmt.Println("3. Run 'argus sync --dry-run' to preview")
 
 	return nil
 }
@@ -140,11 +140,11 @@ func runConfigValidate(cmd *cobra.Command, args []string) error {
 
 	// Check for required environment variables
 	fmt.Printf("\nEnvironment variables:\n")
-	checkEnvVar("PATROL_GITHUB_TOKEN", cfg.GitHubToken)
-	checkEnvVar("PATROL_SNYK_TOKEN", cfg.SnykToken)
-	checkEnvVar("PATROL_JIRA_URL", cfg.JiraURL)
-	checkEnvVar("PATROL_JIRA_USERNAME", cfg.JiraUsername)
-	checkEnvVar("PATROL_JIRA_TOKEN", cfg.JiraToken)
+	checkEnvVar("ARGUS_GITHUB_TOKEN", cfg.GitHubToken)
+	checkEnvVar("ARGUS_SNYK_TOKEN", cfg.SnykToken)
+	checkEnvVar("ARGUS_JIRA_URL", cfg.JiraURL)
+	checkEnvVar("ARGUS_JIRA_USERNAME", cfg.JiraUsername)
+	checkEnvVar("ARGUS_JIRA_TOKEN", cfg.JiraToken)
 
 	return nil
 }

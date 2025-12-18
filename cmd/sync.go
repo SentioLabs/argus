@@ -7,16 +7,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sentiolabs/patrol/internal/config"
-	"github.com/sentiolabs/patrol/internal/jira"
-	"github.com/sentiolabs/patrol/internal/output"
-	"github.com/sentiolabs/patrol/internal/provider"
-	"github.com/sentiolabs/patrol/internal/vuln"
+	"github.com/sentiolabs/argus/internal/config"
+	"github.com/sentiolabs/argus/internal/jira"
+	"github.com/sentiolabs/argus/internal/output"
+	"github.com/sentiolabs/argus/internal/provider"
+	"github.com/sentiolabs/argus/internal/vuln"
 	"github.com/spf13/cobra"
 )
 
 const (
-	// commentThrottleWindow is the minimum time between patrol comments on the same ticket
+	// commentThrottleWindow is the minimum time between argus comments on the same ticket
 	commentThrottleWindow = 24 * time.Hour
 )
 
@@ -166,8 +166,8 @@ func processMergedVulnerabilities(
 		if ticketInfo != nil {
 			result.JiraKey = ticketInfo.Key
 
-			// Check if enough time has passed since last patrol comment
-			lastComment, err := jiraClient.GetLastPatrolComment(ctx, ticketInfo.Key)
+			// Check if enough time has passed since last argus comment
+			lastComment, err := jiraClient.GetLastArgusComment(ctx, ticketInfo.Key)
 			if err != nil {
 				slog.Warn("failed to get last comment time", "key", ticketInfo.Key, "error", err)
 			}

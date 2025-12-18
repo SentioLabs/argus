@@ -1,4 +1,4 @@
-module github.com/sentiolabs/patrol
+module github.com/sentiolabs/argus
 
 go 1.25.5
 

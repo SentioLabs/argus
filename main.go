@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/sentiolabs/patrol/cmd"
+	"github.com/sentiolabs/argus/cmd"
 )
 
 func main() {

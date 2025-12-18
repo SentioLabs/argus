@@ -1,5 +1,5 @@
 # Binary
-patrol
+argus
 
 # Git
 .git
@@ -8,7 +8,7 @@ patrol
 # Environment and local config
 .env
 .env.*
-.patrol.yaml
+.argus.yaml
 
 # IDE
 .idea/

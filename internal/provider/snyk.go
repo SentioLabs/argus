@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sentiolabs/patrol/internal/config"
-	"github.com/sentiolabs/patrol/internal/filter"
+	"github.com/sentiolabs/argus/internal/config"
+	"github.com/sentiolabs/argus/internal/filter"
 )
 
 const (
@@ -106,7 +106,7 @@ type snykProject struct {
 // NewSnykProvider creates a new Snyk provider
 func NewSnykProvider(token string, cfg config.ProviderConfig, filters config.FiltersConfig, severityMappings map[string]string, verbose bool) (*SnykProvider, error) {
 	if token == "" {
-		return nil, fmt.Errorf("PATROL_SNYK_TOKEN environment variable is required")
+		return nil, fmt.Errorf("ARGUS_SNYK_TOKEN environment variable is required")
 	}
 
 	if cfg.OrgID == "" {

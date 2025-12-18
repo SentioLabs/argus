@@ -1,4 +1,4 @@
-// Package config handles the loading and management of Patrol's configuration.
+// Package config handles the loading and management of Argus's configuration.
 // It supports loading from a YAML configuration file and environment variables,
 // with environment variables taking precedence.
 package config
@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-// SeverityOrder defines Patrol's canonical severity levels from lowest to highest.
+// SeverityOrder defines Argus's canonical severity levels from lowest to highest.
 // Provider-specific values (e.g., GitHub's "moderate") are normalized via SeverityMappings.
 var SeverityOrder = map[string]int{
 	"low":      1,
@@ -217,7 +217,7 @@ func (c *Config) ShouldAddToSprint(severity string) bool {
 	return severityLevel >= minLevel
 }
 
-// NormalizeSeverity maps provider-specific severity values to Patrol's canonical levels.
+// NormalizeSeverity maps provider-specific severity values to Argus's canonical levels.
 // For example, GitHub's "moderate" is mapped to "medium".
 func (c *Config) NormalizeSeverity(severity string) string {
 	severity = strings.ToLower(severity)

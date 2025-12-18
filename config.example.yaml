@@ -1,4 +1,4 @@
-# Patrol Configuration
+# Argus Configuration
 
 # Default settings (used by sync command)
 defaults:
@@ -23,11 +23,11 @@ defaults:
     max_age_days: 90                  # Ignore vulns older than this
     cvss_min: 0                       # Minimum CVSS score (0 = no minimum)
 
-  # Severity mappings normalize provider-specific values to Patrol's canonical levels.
-  # Patrol uses: critical, high, medium, low
+  # Severity mappings normalize provider-specific values to Argus's canonical levels.
+  # Argus uses: critical, high, medium, low
   # Default: moderate → medium (for GitHub Dependabot compatibility)
   # severity_mappings:
-  #   moderate: medium                # GitHub's "moderate" → Patrol's "medium"
+  #   moderate: medium                # GitHub's "moderate" → Argus's "medium"
   #   # informational: low            # Example custom mapping
 
 # Provider configurations
@@ -56,8 +56,8 @@ providers:
       min_severity: "high"
 
 # Environment variables required:
-# PATROL_GITHUB_TOKEN  - GitHub personal access token (needs security_events scope)
-# PATROL_SNYK_TOKEN    - Snyk API token
-# PATROL_JIRA_URL      - Jira instance URL (e.g., https://your-domain.atlassian.net)
-# PATROL_JIRA_USERNAME - Jira username/email
-# PATROL_JIRA_TOKEN    - Jira API token
+# ARGUS_GITHUB_TOKEN  - GitHub personal access token (needs security_events scope)
+# ARGUS_SNYK_TOKEN    - Snyk API token
+# ARGUS_JIRA_URL      - Jira instance URL (e.g., https://your-domain.atlassian.net)
+# ARGUS_JIRA_USERNAME - Jira username/email
+# ARGUS_JIRA_TOKEN    - Jira API token

@@ -1,4 +1,4 @@
-// Package output handles the formatting and display of Patrol's execution results.
+// Package output handles the formatting and display of Argus's execution results.
 // It supports multiple formats such as JSON and Table.
 package output
 

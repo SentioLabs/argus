@@ -1,4 +1,4 @@
-# Patrol
+# Argus
 
 A CLI tool that syncs security vulnerabilities from GitHub Dependabot and Snyk to Jira, automating your security ticket workflow.
 
@@ -14,19 +14,19 @@ A CLI tool that syncs security vulnerabilities from GitHub Dependabot and Snyk t
 - **Pattern matching**: Include/exclude repos and projects using glob patterns
 - **Priority mapping**: Map vulnerability severity to Jira priority levels
 - **Severity normalization**: Normalize provider-specific severity values (e.g., GitHub's "moderate" → "medium")
-- **Namespaced labels**: Auto-generate structured Jira labels (`patrol:dependabot`, `patrol:snyk`, `patrol:critical`)
+- **Namespaced labels**: Auto-generate structured Jira labels (`argus:dependabot`, `argus:snyk`, `argus:critical`)
 
 ## Installation
 
 ```bash
-go install github.com/sentiolabs/patrol@latest
+go install github.com/sentiolabs/argus@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/sentiolabs/patrol.git
-cd patrol
+git clone https://github.com/sentiolabs/argus.git
+cd argus
 go build .
 ```
 
@@ -34,27 +34,27 @@ go build .
 
 ```bash
 # Build the image
-docker build -t patrol .
+docker build -t argus .
 
 # Run with environment variables
 docker run --rm \
-  -e PATROL_GITHUB_TOKEN \
-  -e PATROL_SNYK_TOKEN \
-  -e PATROL_JIRA_URL \
-  -e PATROL_JIRA_USERNAME \
-  -e PATROL_JIRA_TOKEN \
-  -v $(pwd)/.patrol.yaml:/app/.patrol.yaml:ro \
-  patrol sync
+  -e ARGUS_GITHUB_TOKEN \
+  -e ARGUS_SNYK_TOKEN \
+  -e ARGUS_JIRA_URL \
+  -e ARGUS_JIRA_USERNAME \
+  -e ARGUS_JIRA_TOKEN \
+  -v $(pwd)/.argus.yaml:/app/.argus.yaml:ro \
+  argus sync
 ```
 
 ### Kubernetes (Helm)
 
-Patrol includes a Helm chart for running as a scheduled CronJob in Kubernetes.
+Argus includes a Helm chart for running as a scheduled CronJob in Kubernetes.
 
 ```bash
 # Install with inline values
-helm install patrol ./charts/patrol \
-  --namespace patrol --create-namespace \
+helm install argus ./charts/argus \
+  --namespace argus --create-namespace \
   --set credentials.githubToken="ghp_xxx" \
   --set credentials.snykToken="xxx-xxx" \
   --set credentials.jiraUrl="https://your-domain.atlassian.net" \
@@ -91,23 +91,23 @@ config:
 ```
 
 ```bash
-helm install patrol ./charts/patrol -f values.yaml -n patrol --create-namespace
+helm install argus ./charts/argus -f values.yaml -n argus --create-namespace
 ```
 
 Use an existing secret instead of storing credentials in values:
 
 ```bash
 # Create secret manually
-kubectl create secret generic patrol-credentials -n patrol \
-  --from-literal=PATROL_GITHUB_TOKEN="ghp_xxx" \
-  --from-literal=PATROL_SNYK_TOKEN="xxx" \
-  --from-literal=PATROL_JIRA_URL="https://your-domain.atlassian.net" \
-  --from-literal=PATROL_JIRA_USERNAME="email@example.com" \
-  --from-literal=PATROL_JIRA_TOKEN="xxx"
+kubectl create secret generic argus-credentials -n argus \
+  --from-literal=ARGUS_GITHUB_TOKEN="ghp_xxx" \
+  --from-literal=ARGUS_SNYK_TOKEN="xxx" \
+  --from-literal=ARGUS_JIRA_URL="https://your-domain.atlassian.net" \
+  --from-literal=ARGUS_JIRA_USERNAME="email@example.com" \
+  --from-literal=ARGUS_JIRA_TOKEN="xxx"
 
 # Install with existing secret
-helm install patrol ./charts/patrol -n patrol \
-  --set existingSecret=patrol-credentials
+helm install argus ./charts/argus -n argus \
+  --set existingSecret=argus-credentials
 ```
 
 ## Configuration
@@ -118,20 +118,20 @@ Set the following environment variables (or use a `.env` file):
 
 ```bash
 # GitHub
-PATROL_GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+ARGUS_GITHUB_TOKEN=ghp_xxxxxxxxxxxx
 
 # Snyk
-PATROL_SNYK_TOKEN=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+ARGUS_SNYK_TOKEN=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 
 # Jira
-PATROL_JIRA_URL=https://your-domain.atlassian.net
-PATROL_JIRA_USERNAME=your-email@example.com
-PATROL_JIRA_TOKEN=xxxxxxxxxxxxxxxx
+ARGUS_JIRA_URL=https://your-domain.atlassian.net
+ARGUS_JIRA_USERNAME=your-email@example.com
+ARGUS_JIRA_TOKEN=xxxxxxxxxxxxxxxx
 ```
 
 ### Configuration File
 
-Create a `.patrol.yaml` file in your working directory:
+Create a `.argus.yaml` file in your working directory:
 
 ```yaml
 defaults:
@@ -153,7 +153,7 @@ defaults:
     max_age_days: 90
   # Severity mappings (optional - defaults shown)
   # severity_mappings:
-  #   moderate: medium  # GitHub's "moderate" → Patrol's "medium"
+  #   moderate: medium  # GitHub's "moderate" → Argus's "medium"
 
 providers:
   github:
@@ -178,16 +178,16 @@ See [config.example.yaml](config.example.yaml) for a complete example.
 
 ```bash
 # Fetch from all providers, dedupe, and sync to Jira
-patrol sync
+argus sync
 
 # Preview what would be synced (no Jira changes)
-patrol sync --dry-run
+argus sync --dry-run
 
 # Verbose output
-patrol sync -v
+argus sync -v
 
 # JSON output
-patrol sync --output json
+argus sync --output json
 ```
 
 ### Verify provider configuration
@@ -196,10 +196,10 @@ Use `verify` to preview vulnerabilities from a specific provider without syncing
 
 ```bash
 # Preview GitHub Dependabot alerts
-patrol verify --provider github
+argus verify --provider github
 
 # Preview Snyk issues
-patrol verify --provider snyk
+argus verify --provider snyk
 ```
 
 This is useful for:
@@ -209,10 +209,10 @@ This is useful for:
 
 ## How It Works
 
-1. **Fetch**: Patrol queries all configured providers for open security vulnerabilities
+1. **Fetch**: Argus queries all configured providers for open security vulnerabilities
 2. **Filter**: Vulnerabilities are filtered by severity, age, CVSS score, and package patterns
 3. **Merge**: Vulnerabilities are deduplicated by CVE across providers (e.g., same CVE from GitHub and Snyk becomes one entry)
-4. **Check Jira**: For each merged vulnerability, Patrol searches Jira for existing open tickets
+4. **Check Jira**: For each merged vulnerability, Argus searches Jira for existing open tickets
 5. **Create or Update**:
    - If no ticket exists: Create a new Jira ticket with severity-based priority
    - If ticket exists and >24h since last comment: Add an informative comment
@@ -221,9 +221,9 @@ This is useful for:
 
 ## Severity Normalization
 
-Different vulnerability providers use different severity terminology. Patrol normalizes these to a consistent set of canonical levels:
+Different vulnerability providers use different severity terminology. Argus normalizes these to a consistent set of canonical levels:
 
-| Patrol Level | Provider Values |
+| Argus Level | Provider Values |
 |--------------|-----------------|
 | `critical` | critical |
 | `high` | high |
@@ -241,17 +241,17 @@ defaults:
 
 ## Jira Labels
 
-Patrol automatically adds structured labels to Jira tickets for easy filtering:
+Argus automatically adds structured labels to Jira tickets for easy filtering:
 
 | Label | Description |
 |-------|-------------|
-| `patrol` | Base label for all Patrol-created tickets |
-| `patrol:dependabot` | Detected by GitHub Dependabot |
-| `patrol:snyk` | Detected by Snyk |
-| `patrol:critical` | Critical severity |
-| `patrol:high` | High severity |
-| `patrol:medium` | Medium severity |
-| `patrol:low` | Low severity |
+| `argus` | Base label for all Argus-created tickets |
+| `argus:dependabot` | Detected by GitHub Dependabot |
+| `argus:snyk` | Detected by Snyk |
+| `argus:critical` | Critical severity |
+| `argus:high` | High severity |
+| `argus:medium` | Medium severity |
+| `argus:low` | Low severity |
 
 These are in addition to any custom labels configured in `defaults.jira.labels`.
 

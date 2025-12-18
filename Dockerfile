@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o patrol .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o argus .
 
 # Runtime stage
 FROM alpine:3.21
@@ -25,12 +25,12 @@ WORKDIR /app
 RUN apk add --no-cache ca-certificates tzdata
 
 # Copy binary from builder
-COPY --from=builder /app/patrol /usr/local/bin/patrol
+COPY --from=builder /app/argus /usr/local/bin/argus
 
 # Create non-root user
-RUN adduser -D -u 1000 patrol
-USER patrol
+RUN adduser -D -u 1000 argus
+USER argus
 
 # Default command
-ENTRYPOINT ["patrol"]
+ENTRYPOINT ["argus"]
 CMD ["--help"]

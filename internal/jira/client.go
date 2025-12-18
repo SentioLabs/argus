@@ -9,8 +9,8 @@ import (
 	"time"
 
 	jira "github.com/andygrunwald/go-jira/v2/cloud"
-	"github.com/sentiolabs/patrol/internal/config"
-	"github.com/sentiolabs/patrol/internal/vuln"
+	"github.com/sentiolabs/argus/internal/config"
+	"github.com/sentiolabs/argus/internal/vuln"
 )
 
 // Client wraps the Jira API client
@@ -35,9 +35,9 @@ func escapeJQL(s string) string {
 func providerToLabel(provider string) string {
 	switch provider {
 	case "github":
-		return "patrol:dependabot"
+		return "argus:dependabot"
 	default:
-		return "patrol:" + provider
+		return "argus:" + provider
 	}
 }
 
@@ -71,14 +71,14 @@ func NewClient(url, username, token string, verbose bool) (*Client, error) {
 }
 
 // FindExistingTicket searches for an existing open ticket with the given vulnerability ID or CVE.
-// It uses JQL to find tickets that are not in "Done" status and have the "patrol" label.
+// It uses JQL to find tickets that are not in "Done" status and have the "argus" label.
 func (c *Client) FindExistingTicket(ctx context.Context, project, vulnID, cve string) (*TicketInfo, error) {
 	// Build JQL query to find existing open tickets
 	var jqlParts []string
 
 	jqlParts = append(jqlParts, fmt.Sprintf("project = %s", project))
 	jqlParts = append(jqlParts, "statusCategory != Done") // Only find tickets not in Done category
-	jqlParts = append(jqlParts, "labels = patrol")        // Only match patrol-created tickets
+	jqlParts = append(jqlParts, "labels = argus")        // Only match argus-created tickets
 
 	if cve != "" {
 		escaped := escapeJQL(cve)
@@ -131,8 +131,8 @@ func (c *Client) FindExistingTicket(ctx context.Context, project, vulnID, cve st
 	return nil, nil
 }
 
-// GetLastPatrolComment returns the timestamp of the last patrol comment on an issue
-func (c *Client) GetLastPatrolComment(ctx context.Context, issueKey string) (time.Time, error) {
+// GetLastArgusComment returns the timestamp of the last argus comment on an issue
+func (c *Client) GetLastArgusComment(ctx context.Context, issueKey string) (time.Time, error) {
 	// Get issue with comments expanded
 	issue, _, err := c.client.Issue.Get(ctx, issueKey, &jira.GetQueryOptions{
 		Fields: "comment",
@@ -145,10 +145,10 @@ func (c *Client) GetLastPatrolComment(ctx context.Context, issueKey string) (tim
 		return time.Time{}, nil
 	}
 
-	// Find the most recent patrol comment (iterate in reverse for most recent)
+	// Find the most recent argus comment (iterate in reverse for most recent)
 	comments := issue.Fields.Comments.Comments
 	for i := len(comments) - 1; i >= 0; i-- {
-		if strings.HasPrefix(comments[i].Body, "[patrol]") {
+		if strings.HasPrefix(comments[i].Body, "[argus]") {
 			// Parse the created timestamp - Jira uses format like "2024-01-15T10:30:00.000+0000"
 			created, err := parseJiraTimestamp(comments[i].Created)
 			if err != nil {
@@ -190,7 +190,7 @@ func (c *Client) AddMergedComment(ctx context.Context, ticketInfo *TicketInfo, v
 	// Build repositories list
 	reposStr := strings.Join(v.Repositories, "\n- ")
 
-	comment := fmt.Sprintf(`[patrol] Vulnerability still detected
+	comment := fmt.Sprintf(`[argus] Vulnerability still detected
 
 This vulnerability was first reported %d days ago and the ticket is currently %s.
 
@@ -257,14 +257,14 @@ func (c *Client) CreateMergedTicket(ctx context.Context, jiraCfg config.JiraConf
 		}
 	}
 
-	// Set labels (include patrol label and provider labels for tracking)
-	labels := []string{"patrol"}
+	// Set labels (include argus label and provider labels for tracking)
+	labels := []string{"argus"}
 	for _, p := range v.Providers {
 		labels = append(labels, providerToLabel(p))
 	}
 	// Add severity label
 	if v.Severity != "" {
-		labels = append(labels, "patrol:"+v.Severity)
+		labels = append(labels, "argus:"+v.Severity)
 	}
 	if len(jiraCfg.Labels) > 0 {
 		fields.Labels = append(jiraCfg.Labels, labels...)

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sentiolabs/patrol/internal/config"
+	"github.com/sentiolabs/argus/internal/config"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 )
 
 // Vulnerability represents a security vulnerability from any provider.
-// This is the canonical model used throughout Patrol.
+// This is the canonical model used throughout Argus.
 type Vulnerability struct {
 	ID           string    `json:"id"`
 	CVE          string    `json:"cve,omitempty"`
@@ -42,7 +42,7 @@ func (v Vulnerability) GetDiscoveredAt() time.Time { return v.DiscoveredAt }
 func (v Vulnerability) GetPackage() string         { return v.Package }
 
 // NormalizeSeverity applies severity mappings to convert provider-specific values
-// (e.g., GitHub's "moderate") to Patrol's canonical levels (critical, high, medium, low).
+// (e.g., GitHub's "moderate") to Argus's canonical levels (critical, high, medium, low).
 func NormalizeSeverity(severity string, mappings map[string]string) string {
 	severity = strings.ToLower(severity)
 	if mapped, exists := mappings[severity]; exists {

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sentiolabs/patrol/internal/provider"
+	"github.com/sentiolabs/argus/internal/provider"
 )
 
 // MergedVulnerability represents a vulnerability that may have been

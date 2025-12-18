@@ -134,7 +134,7 @@ func (s *SeverityTestSuite) TestSetDefaults_PreservesExistingMappings() {
 }
 
 func (s *SeverityTestSuite) TestSeverityOrder_CanonicalLevels() {
-	// Verify Patrol's canonical severity levels are properly ordered
+	// Verify Argus's canonical severity levels are properly ordered
 	assert.Equal(s.T(), 1, SeverityOrder["low"])
 	assert.Equal(s.T(), 2, SeverityOrder["medium"])
 	assert.Equal(s.T(), 3, SeverityOrder["high"])

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/sentiolabs/patrol/internal/config"
-	"github.com/sentiolabs/patrol/internal/output"
-	"github.com/sentiolabs/patrol/internal/provider"
+	"github.com/sentiolabs/argus/internal/config"
+	"github.com/sentiolabs/argus/internal/output"
+	"github.com/sentiolabs/argus/internal/provider"
 	"github.com/spf13/cobra"
 )
 

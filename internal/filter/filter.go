@@ -1,4 +1,4 @@
-// Package filter implements the vulnerability filtering logic for Patrol.
+// Package filter implements the vulnerability filtering logic for Argus.
 // It supports filtering by severity, CVSS score, age, and package patterns.
 package filter
 
@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sentiolabs/patrol/internal/config"
+	"github.com/sentiolabs/argus/internal/config"
 )
 
 // Filterable defines the interface that a vulnerability must implement to be filtered.

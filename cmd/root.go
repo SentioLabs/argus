@@ -17,9 +17,9 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "patrol",
+	Use:   "argus",
 	Short: "Security vulnerability sync tool",
-	Long: `Patrol syncs security vulnerabilities from GitHub Dependabot and Snyk
+	Long: `Argus syncs security vulnerabilities from GitHub Dependabot and Snyk
 to Jira, creating and updating tickets based on configurable thresholds.`,
 }
 
@@ -32,7 +32,7 @@ func Execute() error {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.patrol.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.argus.yaml)")
 	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "preview changes without creating Jira tickets")
 	rootCmd.PersistentFlags().StringVar(&outputFormat, "output", "table", "output format: json or table")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
@@ -41,7 +41,7 @@ func init() {
 func initConfig() {
 	// Automatically bind matching environment variables
 	viper.SetOptions(viper.ExperimentalBindStruct())
-	viper.SetEnvPrefix("PATROL")
+	viper.SetEnvPrefix("ARGUS")
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
@@ -54,7 +54,7 @@ func initConfig() {
 		viper.AddConfigPath(home)
 		viper.AddConfigPath(".")
 		viper.SetConfigType("yaml")
-		viper.SetConfigName(".patrol")
+		viper.SetConfigName(".argus")
 	}
 
 	if err := viper.ReadInConfig(); err == nil {
