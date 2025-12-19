@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.0] - 2025-12-19
+
+### Features
+
+- Bake version info into binaries and docker images
+
 ## [0.2.2] - 2025-12-19
 
 ### Performance
