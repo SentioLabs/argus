@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.2] - 2025-12-19
+
+### Performance
+
+- Use scratch image and native cross-compilation
+
 ## [0.2.1] - 2025-12-19
 
 ### Bug Fixes
