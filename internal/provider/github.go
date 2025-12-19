@@ -16,16 +16,16 @@ import (
 // GitHubProvider fetches Dependabot alerts from GitHub
 type GitHubProvider struct {
 	client           *github.Client
+	cfg              *config.Config
 	orgs             []string
 	repoIncludes     []config.RepoInclude
 	repoExcludes     []string
-	filter           *filter.Filter
 	severityMappings map[string]string
 	verbose          bool
 }
 
 // NewGitHubProvider creates a new GitHub Dependabot provider
-func NewGitHubProvider(token string, cfg config.ProviderConfig, filters config.FiltersConfig, severityMappings map[string]string, verbose bool) (*GitHubProvider, error) {
+func NewGitHubProvider(token string, fullCfg *config.Config, providerCfg config.ProviderConfig, severityMappings map[string]string, verbose bool) (*GitHubProvider, error) {
 	if token == "" {
 		return nil, fmt.Errorf("ARGUS_GITHUB_TOKEN environment variable is required")
 	}
@@ -42,15 +42,12 @@ func NewGitHubProvider(token string, cfg config.ProviderConfig, filters config.F
 	}
 	client := github.NewClient(httpClient)
 
-	// Set verbose flag on filters for debug logging
-	filters.Verbose = verbose
-
 	return &GitHubProvider{
 		client:           client,
-		orgs:             cfg.Orgs,
-		repoIncludes:     cfg.RepoIncludes,
-		repoExcludes:     cfg.RepoExcludes,
-		filter:           filter.New(filters),
+		cfg:              fullCfg,
+		orgs:             providerCfg.Orgs,
+		repoIncludes:     providerCfg.RepoIncludes,
+		repoExcludes:     providerCfg.RepoExcludes,
 		severityMappings: severityMappings,
 		verbose:          verbose,
 	}, nil
@@ -80,6 +77,11 @@ func (p *GitHubProvider) FetchVulnerabilities(ctx context.Context) ([]Vulnerabil
 			slog.Info("fetching Dependabot alerts", "repo", repo)
 		}
 
+		// Get repo-specific filter (applies hierarchy: defaults → provider → repo)
+		filterCfg := p.cfg.GetRepoFilter("github", repo)
+		filterCfg.Verbose = p.verbose
+		repoFilter := filter.New(filterCfg)
+
 		alerts, err := p.getAlertsForRepo(ctx, repo)
 		if err != nil {
 			slog.Warn("failed to get alerts for repo", "repo", repo, "error", err)
@@ -92,7 +94,7 @@ func (p *GitHubProvider) FetchVulnerabilities(ctx context.Context) ([]Vulnerabil
 
 		for _, alert := range alerts {
 			v := p.alertToVulnerability(repo, alert)
-			if p.filter.ShouldInclude(v) {
+			if repoFilter.ShouldInclude(v) {
 				vulns = append(vulns, v)
 			}
 		}

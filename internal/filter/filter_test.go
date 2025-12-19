@@ -40,7 +40,7 @@ func TestFilter_ShouldInclude_Severity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := New(config.FiltersConfig{MinSeverity: tt.minSeverity})
+			f := New(config.FiltersConfig{SeverityThreshold: tt.minSeverity})
 			v := testVulnerability{
 				Severity:     tt.vulnSev,
 				DiscoveredAt: time.Now(),

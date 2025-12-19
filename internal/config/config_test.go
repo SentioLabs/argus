@@ -37,35 +37,6 @@ func TestConfig_GetJiraPriority(t *testing.T) {
 	}
 }
 
-func TestConfig_ShouldAddToSprint(t *testing.T) {
-	cfg := &Config{
-		Defaults: DefaultsConfig{
-			Jira: JiraConfig{
-				SprintThreshold: "high",
-			},
-		},
-	}
-
-	tests := []struct {
-		severity string
-		want     bool
-	}{
-		{"critical", true},
-		{"high", true},
-		{"CRITICAL", true}, // case insensitive
-		{"medium", false},
-		{"low", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.severity, func(t *testing.T) {
-			if got := cfg.ShouldAddToSprint(tt.severity); got != tt.want {
-				t.Errorf("ShouldAddToSprint(%q) = %v, want %v", tt.severity, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestConfig_GetProviderJira(t *testing.T) {
 	cfg := &Config{
 		Defaults: DefaultsConfig{
@@ -122,15 +93,15 @@ func TestConfig_GetProviderFilters(t *testing.T) {
 	cfg := &Config{
 		Defaults: DefaultsConfig{
 			Filters: FiltersConfig{
-				MinSeverity: "medium",
-				MaxAgeDays:  90,
-				CVSSMin:     4.0,
+				SeverityThreshold: "medium",
+				MaxAgeDays:        90,
+				CVSSMin:           4.0,
 			},
 		},
 		Providers: map[string]ProviderConfig{
 			"snyk": {
 				Filters: &FiltersConfig{
-					MinSeverity: "high",
+					SeverityThreshold: "high",
 				},
 			},
 		},
@@ -138,8 +109,8 @@ func TestConfig_GetProviderFilters(t *testing.T) {
 
 	t.Run("provider with filter override", func(t *testing.T) {
 		filters := cfg.GetProviderFilters("snyk")
-		if filters.MinSeverity != "high" {
-			t.Errorf("expected overridden min severity high, got %s", filters.MinSeverity)
+		if filters.SeverityThreshold != "high" {
+			t.Errorf("expected overridden severity threshold high, got %s", filters.SeverityThreshold)
 		}
 		if filters.MaxAgeDays != 90 {
 			t.Errorf("expected default max age days 90, got %d", filters.MaxAgeDays)
@@ -148,8 +119,8 @@ func TestConfig_GetProviderFilters(t *testing.T) {
 
 	t.Run("provider without filter override", func(t *testing.T) {
 		filters := cfg.GetProviderFilters("github")
-		if filters.MinSeverity != "medium" {
-			t.Errorf("expected default min severity, got %s", filters.MinSeverity)
+		if filters.SeverityThreshold != "medium" {
+			t.Errorf("expected default severity threshold, got %s", filters.SeverityThreshold)
 		}
 	})
 }
@@ -164,4 +135,102 @@ func TestSeverityOrder(t *testing.T) {
 	if SeverityOrder["medium"] <= SeverityOrder["low"] {
 		t.Error("medium should be higher than low")
 	}
+}
+
+func TestConfig_GetRepoFilter(t *testing.T) {
+	cfg := &Config{
+		Defaults: DefaultsConfig{
+			Filters: FiltersConfig{
+				SeverityThreshold: "medium",
+				MaxAgeDays:        90,
+				CVSSMin:           4.0,
+			},
+		},
+		Providers: map[string]ProviderConfig{
+			"github": {
+				Filters: &FiltersConfig{
+					SeverityThreshold: "high",
+				},
+				RepoIncludes: []RepoInclude{
+					{Name: "org/repo-a"},
+					{
+						Name: "org/repo-b",
+						Filters: &FiltersConfig{
+							SeverityThreshold: "critical",
+						},
+					},
+					{
+						Name: "org/api-*",
+						Filters: &FiltersConfig{
+							CVSSMin: 7.0,
+						},
+					},
+				},
+			},
+			"snyk": {
+				ProjectIncludes: []RepoInclude{
+					{
+						Name: "proj-critical",
+						Filters: &FiltersConfig{
+							SeverityThreshold: "critical",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	t.Run("defaults only (unknown provider)", func(t *testing.T) {
+		filters := cfg.GetRepoFilter("unknown", "any-repo")
+		if filters.SeverityThreshold != "medium" {
+			t.Errorf("expected default severity threshold, got %s", filters.SeverityThreshold)
+		}
+		if filters.MaxAgeDays != 90 {
+			t.Errorf("expected default max age days, got %d", filters.MaxAgeDays)
+		}
+	})
+
+	t.Run("provider-level override", func(t *testing.T) {
+		filters := cfg.GetRepoFilter("github", "org/other-repo")
+		if filters.SeverityThreshold != "high" {
+			t.Errorf("expected provider severity threshold high, got %s", filters.SeverityThreshold)
+		}
+		if filters.MaxAgeDays != 90 {
+			t.Errorf("expected inherited max age days, got %d", filters.MaxAgeDays)
+		}
+	})
+
+	t.Run("repo-level override", func(t *testing.T) {
+		filters := cfg.GetRepoFilter("github", "org/repo-b")
+		if filters.SeverityThreshold != "critical" {
+			t.Errorf("expected repo severity threshold critical, got %s", filters.SeverityThreshold)
+		}
+		if filters.MaxAgeDays != 90 {
+			t.Errorf("expected inherited max age days, got %d", filters.MaxAgeDays)
+		}
+	})
+
+	t.Run("repo without filter override inherits provider", func(t *testing.T) {
+		filters := cfg.GetRepoFilter("github", "org/repo-a")
+		if filters.SeverityThreshold != "high" {
+			t.Errorf("expected provider severity threshold, got %s", filters.SeverityThreshold)
+		}
+	})
+
+	t.Run("pattern matching repo override", func(t *testing.T) {
+		filters := cfg.GetRepoFilter("github", "org/api-service")
+		if filters.CVSSMin != 7.0 {
+			t.Errorf("expected pattern-matched CVSS min 7.0, got %f", filters.CVSSMin)
+		}
+		if filters.SeverityThreshold != "high" {
+			t.Errorf("expected provider severity threshold (not overridden), got %s", filters.SeverityThreshold)
+		}
+	})
+
+	t.Run("snyk project-level override", func(t *testing.T) {
+		filters := cfg.GetRepoFilter("snyk", "proj-critical")
+		if filters.SeverityThreshold != "critical" {
+			t.Errorf("expected project severity threshold critical, got %s", filters.SeverityThreshold)
+		}
+	})
 }

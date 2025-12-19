@@ -34,7 +34,7 @@ func New(cfg config.FiltersConfig) *Filter {
 func (f *Filter) ShouldInclude(v Filterable) bool {
 	if !f.checkSeverity(v) {
 		if f.cfg.Verbose {
-			slog.Info("filtered out by severity", "package", v.GetPackage(), "severity", v.GetSeverity(), "minSeverity", f.cfg.MinSeverity)
+			slog.Info("filtered out by severity", "package", v.GetPackage(), "severity", v.GetSeverity(), "threshold", f.cfg.SeverityThreshold)
 		}
 		return false
 	}
@@ -65,9 +65,9 @@ func (f *Filter) ShouldInclude(v Filterable) bool {
 	return true
 }
 
-// checkSeverity verifies the vulnerability meets minimum severity
+// checkSeverity verifies the vulnerability meets the severity threshold
 func (f *Filter) checkSeverity(v Filterable) bool {
-	minSeverity := strings.ToLower(f.cfg.MinSeverity)
+	minSeverity := strings.ToLower(f.cfg.SeverityThreshold)
 	if minSeverity == "" {
 		return true
 	}

@@ -68,14 +68,13 @@ func New(name string, cfg *config.Config, verbose bool) (Provider, error) {
 		return nil, fmt.Errorf("provider %q not found in config", name)
 	}
 
-	filters := cfg.GetProviderFilters(name)
 	severityMappings := cfg.Defaults.SeverityMappings
 
 	switch name {
 	case "github":
-		return NewGitHubProvider(cfg.GitHubToken, providerCfg, filters, severityMappings, verbose)
+		return NewGitHubProvider(cfg.GitHubToken, cfg, providerCfg, severityMappings, verbose)
 	case "snyk":
-		return NewSnykProvider(cfg.SnykToken, providerCfg, filters, severityMappings, verbose)
+		return NewSnykProvider(cfg.SnykToken, cfg, providerCfg, severityMappings, verbose)
 	default:
 		return nil, fmt.Errorf("unknown provider: %s", name)
 	}

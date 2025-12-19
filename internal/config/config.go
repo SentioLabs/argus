@@ -5,6 +5,8 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
+	"path/filepath"
 	"reflect"
 	"strings"
 
@@ -45,19 +47,18 @@ type DefaultsConfig struct {
 
 // JiraConfig contains Jira-specific settings
 type JiraConfig struct {
-	Project         string            `mapstructure:"project"`
-	BoardID         int               `mapstructure:"board_id"`
-	BoardName       string            `mapstructure:"board_name"`
-	Assignee        string            `mapstructure:"assignee"` // Email address or Jira account ID
-	Labels          []string          `mapstructure:"labels"`
-	Components      []string          `mapstructure:"components"`
-	PriorityMap     map[string]string `mapstructure:"priority_map"`     // Maps severity → Jira priority
-	SprintThreshold string            `mapstructure:"sprint_threshold"` // Add to sprint if severity >= this
+	Project     string            `mapstructure:"project"`
+	BoardID     int               `mapstructure:"board_id"`
+	BoardName   string            `mapstructure:"board_name"`
+	Assignee    string            `mapstructure:"assignee"` // Email address or Jira account ID
+	Labels      []string          `mapstructure:"labels"`
+	Components  []string          `mapstructure:"components"`
+	PriorityMap map[string]string `mapstructure:"priority_map"` // Maps severity → Jira priority
 }
 
 // FiltersConfig contains filtering settings
 type FiltersConfig struct {
-	MinSeverity     string   `mapstructure:"min_severity"`
+	SeverityThreshold string   `mapstructure:"severity_threshold"`
 	MaxAgeDays      int      `mapstructure:"max_age_days"`
 	CVSSMin         float64  `mapstructure:"cvss_min"`
 	Packages        []string `mapstructure:"packages"`
@@ -67,11 +68,11 @@ type FiltersConfig struct {
 
 // RepoInclude represents a repository include entry with optional overrides.
 // It can be specified as either a simple string (repo name/pattern) or an object
-// with a name field and optional override fields like assignee.
+// with a name field and optional override fields like assignee or filters.
 type RepoInclude struct {
-	Name     string `mapstructure:"name"`     // Repo name or pattern (e.g., "myorg/api-*")
-	Assignee string `mapstructure:"assignee"` // Optional Jira assignee override
-	// Future: Filters, Labels, etc.
+	Name     string         `mapstructure:"name"`     // Repo name or pattern (e.g., "myorg/api-*")
+	Assignee string         `mapstructure:"assignee"` // Optional Jira assignee override
+	Filters  *FiltersConfig `mapstructure:"filters"`  // Optional filter overrides for this repo
 }
 
 // IsPattern returns true if the Name contains glob pattern characters.
@@ -188,12 +189,8 @@ func setDefaults(cfg *Config) {
 		}
 	}
 
-	if cfg.Defaults.Jira.SprintThreshold == "" {
-		cfg.Defaults.Jira.SprintThreshold = "high"
-	}
-
-	if cfg.Defaults.Filters.MinSeverity == "" {
-		cfg.Defaults.Filters.MinSeverity = "medium"
+	if cfg.Defaults.Filters.SeverityThreshold == "" {
+		cfg.Defaults.Filters.SeverityThreshold = "medium"
 	}
 
 	if cfg.Defaults.Filters.MaxAgeDays == 0 {
@@ -239,9 +236,6 @@ func (c *Config) GetProviderJira(providerName string) JiraConfig {
 	if len(provider.Jira.PriorityMap) > 0 {
 		jira.PriorityMap = provider.Jira.PriorityMap
 	}
-	if provider.Jira.SprintThreshold != "" {
-		jira.SprintThreshold = provider.Jira.SprintThreshold
-	}
 
 	return jira
 }
@@ -257,8 +251,8 @@ func (c *Config) GetProviderFilters(providerName string) FiltersConfig {
 	}
 
 	// Override with provider-specific values
-	if provider.Filters.MinSeverity != "" {
-		filters.MinSeverity = provider.Filters.MinSeverity
+	if provider.Filters.SeverityThreshold != "" {
+		filters.SeverityThreshold = provider.Filters.SeverityThreshold
 	}
 	if provider.Filters.MaxAgeDays > 0 {
 		filters.MaxAgeDays = provider.Filters.MaxAgeDays
@@ -285,17 +279,6 @@ func (c *Config) GetJiraPriority(severity string) string {
 	return "Medium" // default
 }
 
-// ShouldAddToSprint checks if a vulnerability should be added to the active sprint
-func (c *Config) ShouldAddToSprint(severity string) bool {
-	severity = strings.ToLower(severity)
-	minSeverity := strings.ToLower(c.Defaults.Jira.SprintThreshold)
-
-	severityLevel := SeverityOrder[severity]
-	minLevel := SeverityOrder[minSeverity]
-
-	return severityLevel >= minLevel
-}
-
 // NormalizeSeverity maps provider-specific severity values to Argus's canonical levels.
 // For example, GitHub's "moderate" is mapped to "medium".
 func (c *Config) NormalizeSeverity(severity string) string {
@@ -304,5 +287,70 @@ func (c *Config) NormalizeSeverity(severity string) string {
 		return mapped
 	}
 	return severity
+}
+
+// GetRepoFilter returns the filter configuration for a specific repo, applying
+// the hierarchy: defaults → provider override → repo override (most specific wins).
+func (c *Config) GetRepoFilter(providerName, repoName string) FiltersConfig {
+	// Start with defaults
+	filters := c.Defaults.Filters
+
+	provider, exists := c.Providers[providerName]
+	if !exists {
+		return filters
+	}
+
+	// Apply provider-level overrides
+	if provider.Filters != nil {
+		filters = mergeFilters(filters, *provider.Filters)
+	}
+
+	// Look for matching repo include with filter override
+	for _, repo := range provider.RepoIncludes {
+		if matchPattern(repo.Name, repoName) && repo.Filters != nil {
+			filters = mergeFilters(filters, *repo.Filters)
+			break
+		}
+	}
+
+	// Also check project includes for Snyk
+	for _, project := range provider.ProjectIncludes {
+		if matchPattern(project.Name, repoName) && project.Filters != nil {
+			filters = mergeFilters(filters, *project.Filters)
+			break
+		}
+	}
+
+	return filters
+}
+
+// mergeFilters applies non-zero override values to base filters.
+func mergeFilters(base, override FiltersConfig) FiltersConfig {
+	if override.SeverityThreshold != "" {
+		base.SeverityThreshold = override.SeverityThreshold
+	}
+	if override.MaxAgeDays > 0 {
+		base.MaxAgeDays = override.MaxAgeDays
+	}
+	if override.CVSSMin > 0 {
+		base.CVSSMin = override.CVSSMin
+	}
+	if len(override.Packages) > 0 {
+		base.Packages = override.Packages
+	}
+	if len(override.ExcludePackages) > 0 {
+		base.ExcludePackages = override.ExcludePackages
+	}
+	return base
+}
+
+// matchPattern checks if a string matches a glob-like pattern (case-insensitive).
+func matchPattern(pattern, s string) bool {
+	matched, err := filepath.Match(strings.ToLower(pattern), strings.ToLower(s))
+	if err != nil {
+		slog.Warn("invalid glob pattern", "pattern", pattern, "error", err)
+		return false
+	}
+	return matched
 }
 

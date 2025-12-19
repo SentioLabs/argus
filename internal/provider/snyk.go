@@ -26,13 +26,13 @@ const (
 
 // SnykProvider fetches vulnerabilities from Snyk
 type SnykProvider struct {
-	client          *http.Client
-	token           string
-	orgID           string
-	apiVersion      string
-	projectIncludes []config.RepoInclude
-	projectExcludes []string
-	filter          *filter.Filter
+	client           *http.Client
+	cfg              *config.Config
+	token            string
+	orgID            string
+	apiVersion       string
+	projectIncludes  []config.RepoInclude
+	projectExcludes  []string
 	severityMappings map[string]string
 	verbose          bool
 }
@@ -103,32 +103,29 @@ type snykProject struct {
 }
 
 // NewSnykProvider creates a new Snyk provider
-func NewSnykProvider(token string, cfg config.ProviderConfig, filters config.FiltersConfig, severityMappings map[string]string, verbose bool) (*SnykProvider, error) {
+func NewSnykProvider(token string, fullCfg *config.Config, providerCfg config.ProviderConfig, severityMappings map[string]string, verbose bool) (*SnykProvider, error) {
 	if token == "" {
 		return nil, fmt.Errorf("ARGUS_SNYK_TOKEN environment variable is required")
 	}
 
-	if cfg.OrgID == "" {
+	if providerCfg.OrgID == "" {
 		return nil, fmt.Errorf("Snyk org_id is required in config")
 	}
 
 	// Use configured API version or fall back to default
-	apiVersion := cfg.APIVersion
+	apiVersion := providerCfg.APIVersion
 	if apiVersion == "" {
 		apiVersion = defaultSnykAPIVersion
 	}
 
-	// Set verbose flag on filters for debug logging
-	filters.Verbose = verbose
-
 	return &SnykProvider{
-		client:          &http.Client{Timeout: HTTPTimeout},
-		token:           token,
-		orgID:           cfg.OrgID,
-		apiVersion:      apiVersion,
-		projectIncludes: cfg.ProjectIncludes,
-		projectExcludes: cfg.ProjectExcludes,
-		filter:          filter.New(filters),
+		client:           &http.Client{Timeout: HTTPTimeout},
+		cfg:              fullCfg,
+		token:            token,
+		orgID:            providerCfg.OrgID,
+		apiVersion:       apiVersion,
+		projectIncludes:  providerCfg.ProjectIncludes,
+		projectExcludes:  providerCfg.ProjectExcludes,
 		severityMappings: severityMappings,
 		verbose:          verbose,
 	}, nil
@@ -158,6 +155,11 @@ func (p *SnykProvider) FetchVulnerabilities(ctx context.Context) ([]Vulnerabilit
 			slog.Info("fetching issues for project", "project", project.Name, "id", project.ID)
 		}
 
+		// Get project-specific filter (applies hierarchy: defaults → provider → project)
+		filterCfg := p.cfg.GetRepoFilter("snyk", project.Name)
+		filterCfg.Verbose = p.verbose
+		projectFilter := filter.New(filterCfg)
+
 		issues, err := p.getIssuesForProject(ctx, project.ID)
 		if err != nil {
 			slog.Warn("failed to get issues for project", "project", project.Name, "error", err)
@@ -170,7 +172,7 @@ func (p *SnykProvider) FetchVulnerabilities(ctx context.Context) ([]Vulnerabilit
 
 		for _, issue := range issues {
 			v := p.issueToVulnerability(project, issue)
-			if p.filter.ShouldInclude(v) {
+			if projectFilter.ShouldInclude(v) {
 				vulns = append(vulns, v)
 			}
 		}

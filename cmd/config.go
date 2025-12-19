@@ -1,12 +1,16 @@
 package cmd
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 
 	"github.com/sentiolabs/argus/internal/config"
 	"github.com/spf13/cobra"
 )
+
+//go:embed configs/example.yaml
+var exampleConfig string
 
 var configCmd = &cobra.Command{
 	Use:   "config",
@@ -30,94 +34,6 @@ func init() {
 	configCmd.AddCommand(configInitCmd)
 	configCmd.AddCommand(configValidateCmd)
 }
-
-const exampleConfig = `# Argus Configuration
-# Base provider config (inherited by all providers)
-defaults:
-  jira:
-    project: "SEC"
-    board_name: "Security Team Board"
-    # Assignees can be email addresses (resolved via Jira API) or raw account IDs
-    assignee: "security-team@example.com"  # Tier 1: Global default
-    labels:
-      - security
-      - vulnerability
-    components:
-      - security
-    # Maps vulnerability severity to Jira priority field
-    # Customize if your Jira uses different priority names
-    priority_map:
-      critical: "Highest"
-      high: "High"
-      medium: "Medium"
-      low: "Low"
-    # Add to active sprint if severity >= this level (critical, high, medium, low)
-    sprint_threshold: "high"
-  filters:
-    min_severity: "medium"
-    max_age_days: 90
-    cvss_min: 4.0
-
-# Provider-specific configs (override defaults)
-#
-# Assignee hierarchy (most specific wins):
-#   1. defaults.jira.assignee              - Global fallback
-#   2. providers.{name}.jira.assignee      - Provider-level override
-#   3. providers.{name}.repo_includes      - Repository-level override (in entry with assignee)
-#
-# When the same CVE is found in repos with different assignees,
-# separate Jira tickets are created (one per assignee).
-providers:
-  github:
-    enabled: true
-    orgs:
-      - your-org
-    # repo_includes: Include specific repos/patterns with optional overrides
-    # - String entries: just the repo name/pattern (e.g., "your-org/api-*")
-    # - Object entries: repo with assignee override
-    # If empty, all repos from orgs are scanned.
-    repo_includes:
-      - "your-org/api-*"              # Pattern: all api-* repos
-      - name: "your-org/frontend"     # Repo with assignee override
-        assignee: "frontend-team@example.com"
-      - name: "your-org/backend"
-        assignee: "backend-team@example.com"
-    # repo_excludes: Exclude repos/patterns (supports glob patterns)
-    repo_excludes:
-      - "your-org/archived-*"
-    jira:
-      assignee: "github-security@example.com"  # Tier 2: Provider-level override
-      labels:
-        - security
-        - dependabot
-    filters:
-      packages: []  # Empty = all packages
-      exclude_packages:
-        - dev-only-pkg
-
-  snyk:
-    enabled: true
-    org_id: "your-snyk-org-id"
-    # project_includes: Include specific projects/patterns with optional overrides
-    # If empty, all projects in the org are scanned.
-    project_includes: []
-    # project_excludes: Exclude projects/patterns
-    project_excludes: []
-    jira:
-      assignee: "snyk-security@example.com"  # Tier 2: Provider-level override
-      labels:
-        - security
-        - snyk
-    filters:
-      min_severity: "high"  # Override default
-
-# Environment variables required:
-# ARGUS_GITHUB_TOKEN  - GitHub personal access token
-# ARGUS_SNYK_TOKEN    - Snyk API token
-# ARGUS_JIRA_URL      - Jira instance URL (e.g., https://your-domain.atlassian.net)
-# ARGUS_JIRA_USERNAME - Jira username/email
-# ARGUS_JIRA_TOKEN    - Jira API token
-`
 
 func runConfigInit(cmd *cobra.Command, args []string) error {
 	filename := ".argus.yaml"
@@ -154,8 +70,7 @@ func runConfigValidate(cmd *cobra.Command, args []string) error {
 	} else if cfg.Defaults.Jira.BoardID > 0 {
 		fmt.Printf("  Board ID: %d\n", cfg.Defaults.Jira.BoardID)
 	}
-	fmt.Printf("  Sprint Threshold: %s\n", cfg.Defaults.Jira.SprintThreshold)
-	fmt.Printf("  Filter Min Severity: %s\n", cfg.Defaults.Filters.MinSeverity)
+	fmt.Printf("  Severity Threshold: %s\n", cfg.Defaults.Filters.SeverityThreshold)
 
 	fmt.Printf("\nProviders:\n")
 	for name, provider := range cfg.Providers {

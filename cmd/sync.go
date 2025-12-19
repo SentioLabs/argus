@@ -219,9 +219,9 @@ func processMergedVulnerabilities(
 		} else {
 			// Create new ticket
 			priority := cfg.GetJiraPriority(v.Severity)
-			addToSprint := cfg.ShouldAddToSprint(v.Severity)
 
-			key, err := jiraClient.CreateMergedTicket(ctx, jiraCfg, v, priority, addToSprint)
+			// All vulnerabilities that pass filters are added to the active sprint
+			key, err := jiraClient.CreateMergedTicket(ctx, jiraCfg, v, priority, true)
 			if err != nil {
 				result.Action = "create_failed"
 				result.Status = "error"
