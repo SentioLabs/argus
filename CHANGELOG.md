@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1] - 2025-12-19
+
+### Bug Fixes
+
+- Add arm64 docker image support
+- Updating gitignore
+
 ## [0.2.0] - 2025-12-19
 
 ### Bug Fixes
