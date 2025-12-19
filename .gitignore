@@ -2,8 +2,10 @@
 argus
 
 # Environment files (contain secrets)
-#.env
-#.env.*
+.env
+.env.*
+.argus.yaml
+argus.yaml
 
 # Go build artifacts
 *.exe
