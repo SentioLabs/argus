@@ -118,6 +118,9 @@ func NewSnykProvider(token string, cfg config.ProviderConfig, filters config.Fil
 		apiVersion = defaultSnykAPIVersion
 	}
 
+	// Set verbose flag on filters for debug logging
+	filters.Verbose = verbose
+
 	return &SnykProvider{
 		client:          &http.Client{Timeout: HTTPTimeout},
 		token:           token,

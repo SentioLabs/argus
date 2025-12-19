@@ -67,6 +67,7 @@ type FiltersConfig struct {
 	CVSSMin         float64  `mapstructure:"cvss_min"`
 	Packages        []string `mapstructure:"packages"`
 	ExcludePackages []string `mapstructure:"exclude_packages"`
+	Verbose         bool     // Set at runtime, not from config
 }
 
 // RepoInclude represents a repository include entry with optional overrides.

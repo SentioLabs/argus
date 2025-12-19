@@ -42,6 +42,9 @@ func NewGitHubProvider(token string, cfg config.ProviderConfig, filters config.F
 	}
 	client := github.NewClient(httpClient)
 
+	// Set verbose flag on filters for debug logging
+	filters.Verbose = verbose
+
 	return &GitHubProvider{
 		client:           client,
 		orgs:             cfg.Orgs,

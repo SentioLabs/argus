@@ -29,21 +29,37 @@ func New(cfg config.FiltersConfig) *Filter {
 	return &Filter{cfg: cfg}
 }
 
-// ShouldInclude checks if a single vulnerability passes all filters
+// ShouldInclude checks if a single vulnerability passes all filters.
+// Use SetVerbose to enable debug logging of filter decisions.
 func (f *Filter) ShouldInclude(v Filterable) bool {
 	if !f.checkSeverity(v) {
+		if f.cfg.Verbose {
+			slog.Info("filtered out by severity", "package", v.GetPackage(), "severity", v.GetSeverity(), "minSeverity", f.cfg.MinSeverity)
+		}
 		return false
 	}
 	if !f.checkCVSS(v) {
+		if f.cfg.Verbose {
+			slog.Info("filtered out by CVSS", "package", v.GetPackage(), "cvss", v.GetCVSS(), "minCVSS", f.cfg.CVSSMin)
+		}
 		return false
 	}
 	if !f.checkAge(v) {
+		if f.cfg.Verbose {
+			slog.Info("filtered out by age", "package", v.GetPackage(), "discoveredAt", v.GetDiscoveredAt(), "maxAgeDays", f.cfg.MaxAgeDays)
+		}
 		return false
 	}
 	if !f.checkPackageInclude(v) {
+		if f.cfg.Verbose {
+			slog.Info("filtered out by package include", "package", v.GetPackage())
+		}
 		return false
 	}
 	if !f.checkPackageExclude(v) {
+		if f.cfg.Verbose {
+			slog.Info("filtered out by package exclude", "package", v.GetPackage())
+		}
 		return false
 	}
 	return true
