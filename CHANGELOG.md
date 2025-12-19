@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.0] - 2025-12-19
+
+### Bug Fixes
+
+- Golangci-lint v2 schema and goimports local-prefix
+
+### Features
+
+- Add verbose filter logging to diagnose excluded vulnerabilities
+
+### Miscellaneous
+
+- Add golangci-lint config and fix all lint errors
+
+### Refactor
+
+- Move priority_map and sprint_threshold under jira config
+- Rename min_severity to severity_threshold and embed example config
+
 ## [0.1.3] - 2025-12-18
 
 ### Bug Fixes
