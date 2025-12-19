@@ -44,13 +44,15 @@ defaults:
       - vulnerability
     components:
       - security
-  thresholds:
-    priority:
+    # Maps vulnerability severity to Jira priority field
+    # Customize if your Jira uses different priority names
+    priority_map:
       critical: "Highest"
       high: "High"
       medium: "Medium"
       low: "Low"
-    sprint_min_severity: "high"  # Add to active sprint if >= this severity
+    # Add to active sprint if severity >= this level (critical, high, medium, low)
+    sprint_threshold: "high"
   filters:
     min_severity: "medium"
     max_age_days: 90
@@ -152,7 +154,7 @@ func runConfigValidate(cmd *cobra.Command, args []string) error {
 	} else if cfg.Defaults.Jira.BoardID > 0 {
 		fmt.Printf("  Board ID: %d\n", cfg.Defaults.Jira.BoardID)
 	}
-	fmt.Printf("  Sprint Min Severity: %s\n", cfg.Defaults.Thresholds.SprintMinSeverity)
+	fmt.Printf("  Sprint Threshold: %s\n", cfg.Defaults.Jira.SprintThreshold)
 	fmt.Printf("  Filter Min Severity: %s\n", cfg.Defaults.Filters.MinSeverity)
 
 	fmt.Printf("\nProviders:\n")

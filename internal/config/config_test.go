@@ -5,8 +5,8 @@ import "testing"
 func TestConfig_GetJiraPriority(t *testing.T) {
 	cfg := &Config{
 		Defaults: DefaultsConfig{
-			Thresholds: ThresholdsConfig{
-				Priority: map[string]string{
+			Jira: JiraConfig{
+				PriorityMap: map[string]string{
 					"critical": "Highest",
 					"high":     "High",
 					"medium":   "Medium",
@@ -40,8 +40,8 @@ func TestConfig_GetJiraPriority(t *testing.T) {
 func TestConfig_ShouldAddToSprint(t *testing.T) {
 	cfg := &Config{
 		Defaults: DefaultsConfig{
-			Thresholds: ThresholdsConfig{
-				SprintMinSeverity: "high",
+			Jira: JiraConfig{
+				SprintThreshold: "high",
 			},
 		},
 	}

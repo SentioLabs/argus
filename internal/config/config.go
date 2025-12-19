@@ -39,25 +39,20 @@ type Config struct {
 // DefaultsConfig contains base configuration inherited by all providers
 type DefaultsConfig struct {
 	Jira             JiraConfig        `mapstructure:"jira"`
-	Thresholds       ThresholdsConfig  `mapstructure:"thresholds"`
 	Filters          FiltersConfig     `mapstructure:"filters"`
 	SeverityMappings map[string]string `mapstructure:"severity_mappings"`
 }
 
 // JiraConfig contains Jira-specific settings
 type JiraConfig struct {
-	Project    string   `mapstructure:"project"`
-	BoardID    int      `mapstructure:"board_id"`
-	BoardName  string   `mapstructure:"board_name"`
-	Assignee   string   `mapstructure:"assignee"` // Email address or Jira account ID
-	Labels     []string `mapstructure:"labels"`
-	Components []string `mapstructure:"components"`
-}
-
-// ThresholdsConfig contains severity threshold mappings
-type ThresholdsConfig struct {
-	Priority          map[string]string `mapstructure:"priority"`
-	SprintMinSeverity string            `mapstructure:"sprint_min_severity"`
+	Project         string            `mapstructure:"project"`
+	BoardID         int               `mapstructure:"board_id"`
+	BoardName       string            `mapstructure:"board_name"`
+	Assignee        string            `mapstructure:"assignee"` // Email address or Jira account ID
+	Labels          []string          `mapstructure:"labels"`
+	Components      []string          `mapstructure:"components"`
+	PriorityMap     map[string]string `mapstructure:"priority_map"`     // Maps severity → Jira priority
+	SprintThreshold string            `mapstructure:"sprint_threshold"` // Add to sprint if severity >= this
 }
 
 // FiltersConfig contains filtering settings
@@ -184,8 +179,8 @@ func (c *Config) Validate() error {
 
 // setDefaults ensures all required fields have sensible defaults
 func setDefaults(cfg *Config) {
-	if cfg.Defaults.Thresholds.Priority == nil {
-		cfg.Defaults.Thresholds.Priority = map[string]string{
+	if cfg.Defaults.Jira.PriorityMap == nil {
+		cfg.Defaults.Jira.PriorityMap = map[string]string{
 			"critical": "Highest",
 			"high":     "High",
 			"medium":   "Medium",
@@ -193,8 +188,8 @@ func setDefaults(cfg *Config) {
 		}
 	}
 
-	if cfg.Defaults.Thresholds.SprintMinSeverity == "" {
-		cfg.Defaults.Thresholds.SprintMinSeverity = "high"
+	if cfg.Defaults.Jira.SprintThreshold == "" {
+		cfg.Defaults.Jira.SprintThreshold = "high"
 	}
 
 	if cfg.Defaults.Filters.MinSeverity == "" {
@@ -241,6 +236,12 @@ func (c *Config) GetProviderJira(providerName string) JiraConfig {
 	if len(provider.Jira.Components) > 0 {
 		jira.Components = provider.Jira.Components
 	}
+	if len(provider.Jira.PriorityMap) > 0 {
+		jira.PriorityMap = provider.Jira.PriorityMap
+	}
+	if provider.Jira.SprintThreshold != "" {
+		jira.SprintThreshold = provider.Jira.SprintThreshold
+	}
 
 	return jira
 }
@@ -278,7 +279,7 @@ func (c *Config) GetProviderFilters(providerName string) FiltersConfig {
 // GetJiraPriority maps a severity level to a Jira priority
 func (c *Config) GetJiraPriority(severity string) string {
 	severity = strings.ToLower(severity)
-	if priority, exists := c.Defaults.Thresholds.Priority[severity]; exists {
+	if priority, exists := c.Defaults.Jira.PriorityMap[severity]; exists {
 		return priority
 	}
 	return "Medium" // default
@@ -287,7 +288,7 @@ func (c *Config) GetJiraPriority(severity string) string {
 // ShouldAddToSprint checks if a vulnerability should be added to the active sprint
 func (c *Config) ShouldAddToSprint(severity string) bool {
 	severity = strings.ToLower(severity)
-	minSeverity := strings.ToLower(c.Defaults.Thresholds.SprintMinSeverity)
+	minSeverity := strings.ToLower(c.Defaults.Jira.SprintThreshold)
 
 	severityLevel := SeverityOrder[severity]
 	minLevel := SeverityOrder[minSeverity]
