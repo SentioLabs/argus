@@ -48,14 +48,12 @@ func runSync(cmd *cobra.Command, args []string) error {
 		fetchErrs []error
 	)
 
-	for name, providerCfg := range cfg.Providers {
+	for name := range cfg.Providers {
+		providerCfg := cfg.Providers[name]
 		if !providerCfg.Enabled {
 			slog.Info("skipping disabled provider", "provider", name)
 			continue
 		}
-
-		// Capture loop variable
-		name := name
 
 		wg.Go(func() {
 			slog.Info("fetching from provider", "provider", name)
@@ -126,8 +124,9 @@ func runSync(cmd *cobra.Command, args []string) error {
 }
 
 func outputDryRun(ctx context.Context, jiraClient *jira.Client, resolver *config.AssigneeResolver, merged []vuln.MergedVulnerability) error {
-	var results []output.SyncResult
-	for _, v := range merged {
+	results := make([]output.SyncResult, 0, len(merged))
+	for i := range merged {
+		v := &merged[i]
 		result := output.SyncResult{
 			Provider:   v.ProvidersString(),
 			VulnID:     v.ID,
@@ -161,9 +160,10 @@ func processMergedVulnerabilities(
 	resolver *config.AssigneeResolver,
 	merged []vuln.MergedVulnerability,
 ) ([]output.SyncResult, error) {
-	var results []output.SyncResult
+	results := make([]output.SyncResult, 0, len(merged))
 
-	for _, v := range merged {
+	for i := range merged {
+		v := &merged[i]
 		// Get base Jira config from first provider
 		jiraCfg := cfg.GetProviderJira(v.Providers[0])
 
@@ -201,7 +201,7 @@ func processMergedVulnerabilities(
 
 			// Only add comment if >24 hours since last comment (or no previous comment found)
 			if lastComment.IsZero() || time.Since(lastComment) > commentThrottleWindow {
-				if err = jiraClient.AddMergedComment(ctx, ticketInfo, v); err != nil {
+				if err = jiraClient.AddMergedComment(ctx, ticketInfo, *v); err != nil {
 					result.Action = "update_failed"
 					result.Status = "error"
 					result.Error = err.Error()
@@ -221,7 +221,7 @@ func processMergedVulnerabilities(
 			priority := cfg.GetJiraPriority(v.Severity)
 
 			// All vulnerabilities that pass filters are added to the active sprint
-			key, err := jiraClient.CreateMergedTicket(ctx, jiraCfg, v, priority, true)
+			key, err := jiraClient.CreateMergedTicket(ctx, jiraCfg, *v, priority, true)
 			if err != nil {
 				result.Action = "create_failed"
 				result.Status = "error"

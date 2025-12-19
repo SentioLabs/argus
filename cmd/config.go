@@ -1,3 +1,4 @@
+// Package cmd implements the CLI commands for argus.
 package cmd
 
 import (
@@ -43,7 +44,7 @@ func runConfigInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("config file %s already exists", filename)
 	}
 
-	if err := os.WriteFile(filename, []byte(exampleConfig), 0644); err != nil {
+	if err := os.WriteFile(filename, []byte(exampleConfig), 0o600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
@@ -73,25 +74,26 @@ func runConfigValidate(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  Severity Threshold: %s\n", cfg.Defaults.Filters.SeverityThreshold)
 
 	fmt.Printf("\nProviders:\n")
-	for name, provider := range cfg.Providers {
+	for name := range cfg.Providers {
+		p := cfg.Providers[name]
 		status := "disabled"
-		if provider.Enabled {
+		if p.Enabled {
 			status = "enabled"
 		}
 		fmt.Printf("  %s: %s\n", name, status)
 
 		// Show repos for GitHub
-		if len(provider.RepoIncludes) > 0 {
+		if len(p.RepoIncludes) > 0 {
 			fmt.Printf("    repos:\n")
-			for _, repo := range provider.RepoIncludes {
+			for _, repo := range p.RepoIncludes {
 				fmt.Printf("      - %s\n", repo.Name)
 			}
 		}
 
 		// Show projects for Snyk
-		if len(provider.ProjectIncludes) > 0 {
+		if len(p.ProjectIncludes) > 0 {
 			fmt.Printf("    projects:\n")
-			for _, project := range provider.ProjectIncludes {
+			for _, project := range p.ProjectIncludes {
 				fmt.Printf("      - %s\n", project.Name)
 			}
 		}

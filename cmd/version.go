@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Build information set by ldflags during compilation.
 var (
 	Version   = "dev"
 	Commit    = "none"

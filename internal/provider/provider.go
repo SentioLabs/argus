@@ -35,11 +35,17 @@ type Vulnerability struct {
 	Provider     string    `json:"provider"`
 }
 
-// Getter methods to implement filter.Filterable interface
-func (v Vulnerability) GetSeverity() string        { return v.Severity }
-func (v Vulnerability) GetCVSS() float64           { return v.CVSS }
+// GetSeverity returns the severity level to implement filter.Filterable interface.
+func (v Vulnerability) GetSeverity() string { return v.Severity }
+
+// GetCVSS returns the CVSS score to implement filter.Filterable interface.
+func (v Vulnerability) GetCVSS() float64 { return v.CVSS }
+
+// GetDiscoveredAt returns the discovery timestamp to implement filter.Filterable interface.
 func (v Vulnerability) GetDiscoveredAt() time.Time { return v.DiscoveredAt }
-func (v Vulnerability) GetPackage() string         { return v.Package }
+
+// GetPackage returns the package name to implement filter.Filterable interface.
+func (v Vulnerability) GetPackage() string { return v.Package }
 
 // NormalizeSeverity applies severity mappings to convert provider-specific values
 // (e.g., GitHub's "moderate") to Argus's canonical levels (critical, high, medium, low).

@@ -66,8 +66,8 @@ func calculateSummary(results []SyncResult) Summary {
 	var summary Summary
 	summary.Total = len(results)
 
-	for _, r := range results {
-		switch r.Action {
+	for i := range results {
+		switch results[i].Action {
 		case "created", "would_create":
 			summary.Created++
 		case "updated":
@@ -103,7 +103,8 @@ func printTable(output Output) error {
 		table.Header("Provider", "Severity", "CVE/ID", "Package", "Repository", "Action", "Assignee", "Jira")
 	}
 
-	for _, r := range output.Results {
+	for i := range output.Results {
+		r := &output.Results[i]
 		vulnID := r.CVE
 		if vulnID == "" {
 			vulnID = r.VulnID
@@ -119,7 +120,7 @@ func printTable(output Output) error {
 			if jiraID == "" && r.Error != "" {
 				jiraID = "ERROR"
 			}
-			table.Append(
+			_ = table.Append(
 				r.Provider,
 				r.Severity,
 				truncate(vulnID, 20),
@@ -130,7 +131,7 @@ func printTable(output Output) error {
 				truncate(jiraID, 20),
 			)
 		} else {
-			table.Append(
+			_ = table.Append(
 				r.Provider,
 				r.Severity,
 				truncate(vulnID, 20),
@@ -143,7 +144,7 @@ func printTable(output Output) error {
 		}
 	}
 
-	table.Render()
+	_ = table.Render()
 
 	// Print summary
 	fmt.Println()

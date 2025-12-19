@@ -1,3 +1,4 @@
+// Package jira provides a client for interacting with Jira Cloud API.
 package jira
 
 import (
@@ -106,19 +107,19 @@ func (c *Client) ResolveAssignee(ctx context.Context, assignee string) (string, 
 
 	if c.verbose {
 		slog.Debug("user search returned", "query", assignee, "count", len(users))
-		for i, u := range users {
-			slog.Debug("user result", "index", i, "accountID", u.AccountID, "email", u.EmailAddress, "displayName", u.DisplayName)
+		for i := range users {
+			slog.Debug("user result", "index", i, "accountID", users[i].AccountID, "email", users[i].EmailAddress, "displayName", users[i].DisplayName)
 		}
 	}
 
 	// Find exact email match (Find() does partial matching)
-	for _, user := range users {
-		if strings.EqualFold(user.EmailAddress, assignee) {
-			c.emailCache[assignee] = user.AccountID
+	for i := range users {
+		if strings.EqualFold(users[i].EmailAddress, assignee) {
+			c.emailCache[assignee] = users[i].AccountID
 			if c.verbose {
-				slog.Debug("resolved email to account ID", "email", assignee, "accountID", user.AccountID, "displayName", user.DisplayName)
+				slog.Debug("resolved email to account ID", "email", assignee, "accountID", users[i].AccountID, "displayName", users[i].DisplayName)
 			}
-			return user.AccountID, nil
+			return users[i].AccountID, nil
 		}
 	}
 
@@ -169,7 +170,7 @@ func (c *Client) FindExistingTicket(ctx context.Context, project, vulnID, cve st
 
 	jqlParts = append(jqlParts, fmt.Sprintf("project = %s", project))
 	jqlParts = append(jqlParts, "statusCategory != Done") // Only find tickets not in Done category
-	jqlParts = append(jqlParts, "labels = argus")        // Only match argus-created tickets
+	jqlParts = append(jqlParts, "labels = argus")         // Only match argus-created tickets
 
 	if cve != "" {
 		escaped := escapeJQL(cve)

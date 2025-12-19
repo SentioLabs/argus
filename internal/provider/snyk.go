@@ -109,7 +109,7 @@ func NewSnykProvider(token string, fullCfg *config.Config, providerCfg config.Pr
 	}
 
 	if providerCfg.OrgID == "" {
-		return nil, fmt.Errorf("Snyk org_id is required in config")
+		return nil, fmt.Errorf("snyk org_id is required in config")
 	}
 
 	// Use configured API version or fall back to default
@@ -170,8 +170,8 @@ func (p *SnykProvider) FetchVulnerabilities(ctx context.Context) ([]Vulnerabilit
 			slog.Info("found issues for project", "project", project.Name, "count", len(issues))
 		}
 
-		for _, issue := range issues {
-			v := p.issueToVulnerability(project, issue)
+		for j := range issues {
+			v := p.issueToVulnerability(project, issues[j])
 			if projectFilter.ShouldInclude(v) {
 				vulns = append(vulns, v)
 			}
@@ -193,7 +193,7 @@ func (p *SnykProvider) getProjects(ctx context.Context) ([]snykProject, error) {
 	var allProjects []snykProject
 
 	for url != "" {
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 		if err != nil {
 			return nil, err
 		}
@@ -205,18 +205,18 @@ func (p *SnykProvider) getProjects(ctx context.Context) ([]snykProject, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
 
 		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close() // Close immediately after reading
 		if err != nil {
 			return nil, fmt.Errorf("failed to read response body: %w", err)
 		}
 
 		if resp.StatusCode != http.StatusOK {
 			if p.verbose {
-				slog.Error("Snyk API error", "status", resp.Status, "body", string(body))
+				slog.Error("snyk API error", "status", resp.Status, "body", string(body))
 			}
-			return nil, fmt.Errorf("Snyk API error: %s - %s", resp.Status, string(body))
+			return nil, fmt.Errorf("snyk API error: %s - %s", resp.Status, string(body))
 		}
 
 		var projectsResp snykRESTProjectsResponse
@@ -224,7 +224,8 @@ func (p *SnykProvider) getProjects(ctx context.Context) ([]snykProject, error) {
 			return nil, fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		for _, proj := range projectsResp.Data {
+		for i := range projectsResp.Data {
+			proj := &projectsResp.Data[i]
 			allProjects = append(allProjects, snykProject{
 				ID:   proj.ID,
 				Name: proj.Attributes.Name,
@@ -243,8 +244,9 @@ func (p *SnykProvider) getProjects(ctx context.Context) ([]snykProject, error) {
 	}
 
 	// Apply project filtering
-	var filteredProjects []snykProject
-	for _, project := range allProjects {
+	filteredProjects := make([]snykProject, 0, len(allProjects))
+	for i := range allProjects {
+		project := &allProjects[i]
 		// Check exclusions first
 		if p.matchesExclude(project.Name) {
 			if p.verbose {
@@ -258,7 +260,7 @@ func (p *SnykProvider) getProjects(ctx context.Context) ([]snykProject, error) {
 			continue
 		}
 
-		filteredProjects = append(filteredProjects, project)
+		filteredProjects = append(filteredProjects, *project)
 	}
 
 	if p.verbose && (len(p.projectIncludes) > 0 || len(p.projectExcludes) > 0) {
@@ -309,7 +311,7 @@ func (p *SnykProvider) getIssuesForProject(ctx context.Context, projectID string
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -318,9 +320,9 @@ func (p *SnykProvider) getIssuesForProject(ctx context.Context, projectID string
 
 	if resp.StatusCode != http.StatusOK {
 		if p.verbose {
-			slog.Error("Snyk API error", "status", resp.Status, "body", string(body))
+			slog.Error("snyk API error", "status", resp.Status, "body", string(body))
 		}
-		return nil, fmt.Errorf("Snyk API error: %s - %s", resp.Status, string(body))
+		return nil, fmt.Errorf("snyk API error: %s - %s", resp.Status, string(body))
 	}
 
 	var issuesResp snykIssuesResponse
@@ -329,10 +331,11 @@ func (p *SnykProvider) getIssuesForProject(ctx context.Context, projectID string
 	}
 
 	// Filter to only vulnerabilities (not license issues)
-	var vulnIssues []snykIssue
-	for _, issue := range issuesResp.Issues {
+	vulnIssues := make([]snykIssue, 0, len(issuesResp.Issues))
+	for i := range issuesResp.Issues {
+		issue := &issuesResp.Issues[i]
 		if issue.IssueType == "vuln" && !issue.IsPatched && !issue.IsIgnored {
-			vulnIssues = append(vulnIssues, issue)
+			vulnIssues = append(vulnIssues, *issue)
 		}
 	}
 

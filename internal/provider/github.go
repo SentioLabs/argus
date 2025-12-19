@@ -201,7 +201,7 @@ func (p *GitHubProvider) getOrgRepositories(ctx context.Context, org string) ([]
 		if resp.NextPage == 0 {
 			break
 		}
-		opts.ListOptions.Page = resp.NextPage
+		opts.Page = resp.NextPage
 	}
 
 	return allRepos, nil

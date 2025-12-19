@@ -17,10 +17,10 @@ type testVulnerability struct {
 	DiscoveredAt time.Time
 }
 
-func (v testVulnerability) GetSeverity() string      { return v.Severity }
-func (v testVulnerability) GetCVSS() float64         { return v.CVSS }
+func (v testVulnerability) GetSeverity() string        { return v.Severity }
+func (v testVulnerability) GetCVSS() float64           { return v.CVSS }
 func (v testVulnerability) GetDiscoveredAt() time.Time { return v.DiscoveredAt }
-func (v testVulnerability) GetPackage() string       { return v.Package }
+func (v testVulnerability) GetPackage() string         { return v.Package }
 
 func TestFilter_ShouldInclude_Severity(t *testing.T) {
 	tests := []struct {

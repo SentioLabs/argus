@@ -29,7 +29,7 @@ func init() {
 	rootCmd.AddCommand(verifyCmd)
 
 	verifyCmd.Flags().StringVar(&providerFlag, "provider", "", "provider to verify (required, e.g., 'github' or 'snyk')")
-	verifyCmd.MarkFlagRequired("provider")
+	_ = verifyCmd.MarkFlagRequired("provider")
 }
 
 func runVerify(cmd *cobra.Command, args []string) error {
@@ -65,8 +65,9 @@ func runVerify(cmd *cobra.Command, args []string) error {
 	slog.Info("fetched vulnerabilities", "provider", providerFlag, "count", len(vulns))
 
 	// Build preview results (always dry-run style)
-	var results []output.SyncResult
-	for _, v := range vulns {
+	results := make([]output.SyncResult, 0, len(vulns))
+	for i := range vulns {
+		v := &vulns[i]
 		results = append(results, output.SyncResult{
 			Provider:   providerFlag,
 			VulnID:     v.ID,

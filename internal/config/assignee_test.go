@@ -157,12 +157,12 @@ func TestMatchRepoPattern(t *testing.T) {
 		repo    string
 		want    bool
 	}{
-		{"org/repo", "org/repo", true},           // Exact match
-		{"org/repo", "org/other", false},         // No match
-		{"org/api-*", "org/api-service", true},   // Glob match
-		{"org/api-*", "org/web-service", false},  // No glob match
+		{"org/repo", "org/repo", true},          // Exact match
+		{"org/repo", "org/other", false},        // No match
+		{"org/api-*", "org/api-service", true},  // Glob match
+		{"org/api-*", "org/web-service", false}, // No glob match
 		{"org/*-service", "org/api-service", true},
-		{"org/[ab]bc", "org/abc", true},          // Character class
+		{"org/[ab]bc", "org/abc", true}, // Character class
 		{"org/[ab]bc", "org/bbc", true},
 		{"org/[ab]bc", "org/cbc", false},
 	}

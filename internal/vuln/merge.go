@@ -1,3 +1,4 @@
+// Package vuln handles vulnerability deduplication and merging across providers.
 package vuln
 
 import (
@@ -46,8 +47,9 @@ type AssigneeResolver interface {
 func Merge(vulns []provider.Vulnerability) []MergedVulnerability {
 	byKey := make(map[string]*MergedVulnerability)
 
-	for _, v := range vulns {
-		key := dedupeKey(v)
+	for i := range vulns {
+		v := &vulns[i]
+		key := dedupeKey(*v)
 
 		if existing, ok := byKey[key]; ok {
 			// Add provider if not already present
@@ -117,9 +119,10 @@ func Merge(vulns []provider.Vulnerability) []MergedVulnerability {
 func MergeWithAssignees(vulns []provider.Vulnerability, resolver AssigneeResolver) []MergedVulnerability {
 	byKey := make(map[string]*MergedVulnerability)
 
-	for _, v := range vulns {
+	for i := range vulns {
+		v := &vulns[i]
 		assignee := resolver.Resolve(v.Provider, v.Repository)
-		key := dedupeKeyWithAssignee(v, assignee)
+		key := dedupeKeyWithAssignee(*v, assignee)
 
 		if existing, ok := byKey[key]; ok {
 			// Add provider if not already present

@@ -59,11 +59,11 @@ type JiraConfig struct {
 // FiltersConfig contains filtering settings
 type FiltersConfig struct {
 	SeverityThreshold string   `mapstructure:"severity_threshold"`
-	MaxAgeDays      int      `mapstructure:"max_age_days"`
-	CVSSMin         float64  `mapstructure:"cvss_min"`
-	Packages        []string `mapstructure:"packages"`
-	ExcludePackages []string `mapstructure:"exclude_packages"`
-	Verbose         bool     // Set at runtime, not from config
+	MaxAgeDays        int      `mapstructure:"max_age_days"`
+	CVSSMin           float64  `mapstructure:"cvss_min"`
+	Packages          []string `mapstructure:"packages"`
+	ExcludePackages   []string `mapstructure:"exclude_packages"`
+	Verbose           bool     // Set at runtime, not from config
 }
 
 // RepoInclude represents a repository include entry with optional overrides.
@@ -150,9 +150,10 @@ func repoIncludeDecodeHook() mapstructure.DecodeHookFunc {
 
 // Validate checks the configuration for errors.
 func (c *Config) Validate() error {
-	for name, provider := range c.Providers {
+	for name := range c.Providers {
+		p := c.Providers[name]
 		// Validate repo_includes format
-		for _, repo := range provider.RepoIncludes {
+		for _, repo := range p.RepoIncludes {
 			if repo.Name == "" {
 				return fmt.Errorf("provider %s: repo_includes entry has empty name", name)
 			}
@@ -162,14 +163,14 @@ func (c *Config) Validate() error {
 		}
 
 		// Validate repo_excludes format
-		for _, pattern := range provider.RepoExcludes {
+		for _, pattern := range p.RepoExcludes {
 			if !strings.Contains(pattern, "/") {
 				return fmt.Errorf("provider %s: exclude %q must be in org/repo format", name, pattern)
 			}
 		}
 
 		// Validate project_includes format (for Snyk)
-		for _, project := range provider.ProjectIncludes {
+		for _, project := range p.ProjectIncludes {
 			if project.Name == "" {
 				return fmt.Errorf("provider %s: project_includes entry has empty name", name)
 			}
@@ -353,4 +354,3 @@ func matchPattern(pattern, s string) bool {
 	}
 	return matched
 }
-
