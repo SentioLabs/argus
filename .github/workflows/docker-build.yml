@@ -32,6 +32,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get short SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -57,7 +61,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ github.ref_name }}
-            COMMIT=${{ github.sha }}
+            COMMIT=${{ steps.sha.outputs.short }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
