@@ -1,6 +1,13 @@
 .PHONY: help build run test lint clean release release-dry-run changelog
 
 BINARY_NAME := argus
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
+BUILD_DATE := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
+LDFLAGS := -s -w \
+	-X github.com/sentiolabs/argus/cmd.Version=$(VERSION) \
+	-X github.com/sentiolabs/argus/cmd.Commit=$(COMMIT) \
+	-X github.com/sentiolabs/argus/cmd.BuildDate=$(BUILD_DATE)
 
 ## help: Show this help message
 help:
@@ -11,7 +18,7 @@ help:
 
 ## build: Build the argus binary
 build:
-	go build -o $(BINARY_NAME) .
+	go build -ldflags="$(LDFLAGS)" -o $(BINARY_NAME) .
 
 ## run: Run argus sync in dry-run mode
 run: build

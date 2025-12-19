@@ -16,9 +16,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X main.version={{.Version}}
-      - -X main.commit={{.Commit}}
-      - -X main.date={{.Date}}
+      - -X github.com/sentiolabs/argus/cmd.Version={{.Version}}
+      - -X github.com/sentiolabs/argus/cmd.Commit={{.ShortCommit}}
+      - -X github.com/sentiolabs/argus/cmd.BuildDate={{.Date}}
 
 archives:
   - formats:

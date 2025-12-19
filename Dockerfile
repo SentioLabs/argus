@@ -2,6 +2,9 @@
 FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 
 ARG TARGETARCH
+ARG VERSION=dev
+ARG COMMIT=none
+ARG BUILD_DATE=unknown
 
 WORKDIR /app
 
@@ -16,7 +19,12 @@ RUN go mod download
 COPY . .
 
 # Cross-compile natively (no QEMU emulation needed)
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -ldflags="-w -s" -o argus .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build \
+    -ldflags="-w -s \
+        -X github.com/sentiolabs/argus/cmd.Version=$VERSION \
+        -X github.com/sentiolabs/argus/cmd.Commit=$COMMIT \
+        -X github.com/sentiolabs/argus/cmd.BuildDate=$BUILD_DATE" \
+    -o argus .
 
 # Runtime stage - minimal scratch image
 FROM scratch
