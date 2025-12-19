@@ -1,10 +1,12 @@
-# Build stage
-FROM golang:1.25-alpine AS builder
+# Build stage - runs on native platform for fast cross-compilation
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+
+ARG TARGETARCH
 
 WORKDIR /app
 
-# Install ca-certificates for HTTPS requests
-RUN apk add --no-cache ca-certificates
+# Install certs and tzdata to copy to scratch image
+RUN apk add --no-cache ca-certificates tzdata
 
 # Copy go mod files first for better caching
 COPY go.mod go.sum ./
@@ -13,24 +15,23 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o argus .
+# Cross-compile natively (no QEMU emulation needed)
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -ldflags="-w -s" -o argus .
 
-# Runtime stage
-FROM alpine:3.21
+# Runtime stage - minimal scratch image
+FROM scratch
 
-WORKDIR /app
+# Copy certs for HTTPS requests to GitHub/Snyk/Jira APIs
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
-# Install ca-certificates for HTTPS requests to GitHub/Snyk/Jira APIs
-RUN apk add --no-cache ca-certificates tzdata
+# Copy timezone data
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 
-# Copy binary from builder
-COPY --from=builder /app/argus /usr/local/bin/argus
+# Copy binary
+COPY --from=builder /app/argus /argus
 
-# Create non-root user
-RUN adduser -D -u 1000 argus
-USER argus
+# Run as non-root (numeric UID since scratch has no /etc/passwd)
+USER 1000
 
-# Default command
-ENTRYPOINT ["argus"]
+ENTRYPOINT ["/argus"]
 CMD ["--help"]
