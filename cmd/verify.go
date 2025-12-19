@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/spf13/cobra"
+
 	"github.com/sentiolabs/argus/internal/config"
 	"github.com/sentiolabs/argus/internal/output"
 	"github.com/sentiolabs/argus/internal/provider"
-	"github.com/spf13/cobra"
 )
 
 var providerFlag string

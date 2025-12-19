@@ -8,9 +8,10 @@ import (
 	"strings"
 
 	"github.com/google/go-github/v57/github"
+	"golang.org/x/oauth2"
+
 	"github.com/sentiolabs/argus/internal/config"
 	"github.com/sentiolabs/argus/internal/filter"
-	"golang.org/x/oauth2"
 )
 
 // GitHubProvider fetches Dependabot alerts from GitHub

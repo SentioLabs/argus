@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sentiolabs/argus/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/sentiolabs/argus/internal/config"
 )
 
 //go:embed configs/example.yaml

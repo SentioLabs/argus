@@ -10,6 +10,7 @@ import (
 	"time"
 
 	jira "github.com/andygrunwald/go-jira/v2/cloud"
+
 	"github.com/sentiolabs/argus/internal/config"
 	"github.com/sentiolabs/argus/internal/vuln"
 )

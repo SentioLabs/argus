@@ -7,12 +7,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/sentiolabs/argus/internal/config"
 	"github.com/sentiolabs/argus/internal/jira"
 	"github.com/sentiolabs/argus/internal/output"
 	"github.com/sentiolabs/argus/internal/provider"
 	"github.com/sentiolabs/argus/internal/vuln"
-	"github.com/spf13/cobra"
 )
 
 const (
