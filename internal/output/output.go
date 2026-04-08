@@ -166,6 +166,49 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen-3] + "..."
 }
 
+// SearchResultRow represents a single search result for display.
+type SearchResultRow struct {
+	Provider   string `json:"provider"`
+	Severity   string `json:"severity"`
+	ID         string `json:"id"`
+	CVE        string `json:"cve,omitempty"`
+	Package    string `json:"package"`
+	Repository string `json:"repository"`
+}
+
+// PrintSearch outputs search results in the specified format.
+func PrintSearch(results []SearchResultRow, format string) error {
+	switch strings.ToLower(format) {
+	case "json":
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(results)
+	default:
+		return printSearchTable(results)
+	}
+}
+
+func printSearchTable(results []SearchResultRow) error {
+	table := tablewriter.NewTable(os.Stdout)
+	table.Header("Provider", "Severity", "ID", "CVE", "Package", "Repository")
+
+	for i := range results {
+		r := &results[i]
+		_ = table.Append(
+			r.Provider,
+			r.Severity,
+			truncate(r.ID, 38),
+			truncate(r.CVE, 16),
+			truncate(r.Package, 25),
+			truncate(r.Repository, 32),
+		)
+	}
+
+	_ = table.Render()
+	fmt.Printf("\n%d results\n", len(results))
+	return nil
+}
+
 // VulnDetail contains all fields for the detailed single-vulnerability view.
 type VulnDetail struct {
 	ID           string  `json:"id"`

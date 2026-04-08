@@ -117,24 +117,18 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Convert SearchResult slice to output.SyncResult slice
-	syncResults := make([]output.SyncResult, 0, len(results))
-	for _, r := range results {
-		action := "N/A"
-		if r.Relevance != 0 {
-			action = fmt.Sprintf("%.2f", r.Relevance)
-		}
-		syncResults = append(syncResults, output.SyncResult{
+	// Convert to search-specific output rows
+	rows := make([]output.SearchResultRow, len(results))
+	for i, r := range results {
+		rows[i] = output.SearchResultRow{
 			Provider:   r.Provider,
-			VulnID:     r.ID,
-			CVE:        r.CVE,
 			Severity:   r.Severity,
+			ID:         r.ID,
+			CVE:        r.CVE,
 			Package:    r.Package,
 			Repository: r.Repository,
-			Action:     action,
-			Status:     "cached",
-		})
+		}
 	}
 
-	return output.Print(syncResults, GetOutput(), true)
+	return output.PrintSearch(rows, GetOutput())
 }
