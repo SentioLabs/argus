@@ -8,13 +8,11 @@ before:
 
 builds:
   - env:
-      - CGO_ENABLED=0
+      - CGO_ENABLED=1
     goos:
       - linux
-      - darwin
     goarch:
       - amd64
-      - arm64
     ldflags:
       - -s -w
       - -X github.com/sentiolabs/argus/cmd.Version={{.Version}}
