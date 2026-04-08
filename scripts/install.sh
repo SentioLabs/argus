@@ -120,9 +120,9 @@ detect_platform() {
 
     platform="${os}_${arch}"
 
-    # Validate against supported platforms (stoolap-go native lib availability)
+    # Validate against supported platforms
     case "$platform" in
-        linux_amd64|darwin_arm64)
+        linux_amd64|linux_arm64|darwin_arm64)
             ;;
         *)
             log_error "No prebuilt binary for ${platform}"
