@@ -1,4 +1,4 @@
-.PHONY: help build run test lint clean
+.PHONY: help build run test lint clean release-snapshot
 
 BINARY_NAME := argus
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -62,3 +62,7 @@ version: build
 ## install: Install argus via go install with version info
 install:
 	go install -ldflags="$(LDFLAGS)" .
+
+## release-snapshot: Build release snapshot locally (no tag required)
+release-snapshot:
+	goreleaser release --snapshot --clean
