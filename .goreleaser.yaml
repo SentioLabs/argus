@@ -11,14 +11,21 @@ builds:
   - env:
       - CGO_ENABLED=1
     goos:
-      - "{{ .Env.GOOS }}"
+      - linux
+      - darwin
     goarch:
-      - "{{ .Env.GOARCH }}"
+      - amd64
+      - arm64
     ldflags:
       - -s -w
       - -X github.com/sentiolabs/argus/cmd.Version={{.Version}}
       - -X github.com/sentiolabs/argus/cmd.Commit={{.ShortCommit}}
       - -X github.com/sentiolabs/argus/cmd.BuildDate={{.Date}}
+    ignore:
+      - goos: linux
+        goarch: arm64
+      - goos: darwin
+        goarch: amd64
 
 archives:
   - formats:
