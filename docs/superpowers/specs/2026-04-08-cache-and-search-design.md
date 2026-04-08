@@ -14,11 +14,11 @@ These decisions were made during brainstorming and are final:
 
 1. **Search strategy: Hybrid (Option C)** — bare words trigger semantic search via `EMBED()` + cosine distance; field prefixes (`severity:critical`, `package:rack*`) use SQL WHERE clauses; both can combine in a single query.
 
-2. **Cache location: XDG-compliant** — `$XDG_CACHE_HOME/argus/<project-key>/` (defaults to `~/.cache/argus/<project-key>/`).
+2. **Cache location: XDG-compliant** — single database at `$XDG_CACHE_HOME/argus/vulns.db` (defaults to `~/.cache/argus/vulns.db`).
 
-3. **Project key: Path-derived** — the repo root (or cwd) full path converted to a hyphenated directory name (e.g., `/home/bfirestone/devspace/personal/sentiolabs/argus` becomes `-home-bfirestone-devspace-personal-sentiolabs-argus`). Fully automatic, zero config, deterministic.
+3. **Project key: Path-derived** — the repo root (or cwd) full path converted to a hyphenated string (e.g., `/home/bfirestone/devspace/personal/sentiolabs/argus` becomes `-home-bfirestone-devspace-personal-sentiolabs-argus`). Stored as a column in the database. Fully automatic, zero config, deterministic.
 
-4. **Multi-project support** — per-project cache directories with `--all-projects` flag to search across all cached projects.
+4. **Single database, multi-project** — all projects share one database, partitioned by `project_key` column. Default queries scope to the current project; `--all-projects` removes the filter.
 
 5. **Storage engine: Stoolap** — embedded Rust-based SQL database with native `EMBED()` function (all-MiniLM-L6-v2 sentence transformer, 384 dimensions, runs locally, no external APIs). Provides semantic search for bare-word queries and standard SQL for field-aware queries.
 
@@ -28,10 +28,11 @@ These decisions were made during brainstorming and are final:
 
 ## Database Schema
 
-Single Stoolap database per project at `~/.cache/argus/<project-key>/vulns.db`.
+Single shared Stoolap database at `~/.cache/argus/vulns.db`. All projects coexist in one database, partitioned by `project_key`.
 
 ```sql
 CREATE TABLE vulnerabilities (
+    project_key TEXT NOT NULL,
     id TEXT NOT NULL,
     cve TEXT,
     severity TEXT NOT NULL,
@@ -47,6 +48,7 @@ CREATE TABLE vulnerabilities (
     embedding VECTOR(384)
 );
 
+CREATE INDEX idx_vuln_project ON vulnerabilities(project_key);
 CREATE INDEX idx_vuln_id ON vulnerabilities(id);
 CREATE INDEX idx_vuln_cve ON vulnerabilities(cve);
 CREATE INDEX idx_vuln_severity ON vulnerabilities(severity);
@@ -57,10 +59,12 @@ CREATE INDEX idx_vuln_embedding ON vulnerabilities(embedding)
     USING HNSW WITH (metric = 'cosine');
 
 CREATE TABLE cache_meta (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
+    project_key TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (project_key, key)
 );
--- Stores: fetched_at, providers, count, ttl_hours
+-- Stores per project: fetched_at, providers, count, ttl_hours
 ```
 
 ### Embedding Content
@@ -71,10 +75,10 @@ When inserting a vulnerability, the embedding is generated from a concatenation 
 -- In Go, the embedding text is constructed before the INSERT:
 --   embedText = id + " " + cve + " " + package + " " + repository + " " + description
 -- Then passed as a single parameter:
-INSERT INTO vulnerabilities (id, cve, severity, cvss, package, version,
+INSERT INTO vulnerabilities (project_key, id, cve, severity, cvss, package, version,
     fixed_version, repository, description, url, discovered_at, provider, embedding)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, EMBED($13));
--- $13 = concatenated search text built in Go
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, EMBED($14));
+-- $1 = project_key, $14 = concatenated search text built in Go
 ```
 
 This ensures semantic search matches against vulnerability identifiers, package names, repo context, and description text.
@@ -94,8 +98,8 @@ argus cache refresh --provider github  # github/dependabot only
 **Behavior:**
 - Reuses existing `provider.FetchVulnerabilities()` — same code path as `sync` and `verify`
 - Existing config filters (severity threshold, package includes/excludes, etc.) are applied during fetch, same as today
-- Clears existing cache data for the fetched provider(s) before writing (full replace, not append)
-- Writes `cache_meta` entries: `fetched_at`, `providers`, `count`, `ttl_hours`
+- Clears existing cache data for the current project + fetched provider(s) via `DELETE FROM vulnerabilities WHERE project_key = ? AND provider IN (?)` before writing (full replace per project+provider, not append)
+- Writes `cache_meta` entries scoped to project_key: `fetched_at`, `providers`, `count`, `ttl_hours`
 
 ### `argus cache status`
 
@@ -104,8 +108,9 @@ Shows cache state for the current project.
 ```
 $ argus cache status
 Project:    -home-bfirestone-devspace-personal-sentiolabs-argus
-Location:   /home/bfirestone/.cache/argus/-home-bfirestone-devspace-personal-sentiolabs-argus/vulns.db
-Cached:     142 vulnerabilities
+Database:   /home/bfirestone/.cache/argus/vulns.db
+Cached:     142 vulnerabilities (this project)
+Total:      580 vulnerabilities (all projects)
 Providers:  snyk, github
 Fetched:    2026-04-08 14:30:00 UTC (2 hours ago)
 TTL:        24h (valid)
@@ -114,8 +119,8 @@ TTL:        24h (valid)
 ### `argus cache clear`
 
 ```
-argus cache clear          # clear current project cache
-argus cache clear --all    # clear all project caches
+argus cache clear          # clear current project's data from the database
+argus cache clear --all    # clear all projects' data (resets the database)
 ```
 
 ### `argus search <query>`
@@ -156,17 +161,18 @@ argus search "rails" --limit 50                         # override default resul
 WITH query AS (
     SELECT EMBED('session handling auth bypass') AS vec
 )
-SELECT id, cve, severity, cvss, package, repository, description, url, provider,
+SELECT project_key, id, cve, severity, cvss, package, repository, description, url, provider,
        VEC_DISTANCE_COSINE(embedding, query.vec) AS relevance
 FROM vulnerabilities, query
-WHERE severity = 'critical'  -- from field prefix, if any
+WHERE project_key = '-home-bfirestone-devspace-personal-sentiolabs-argus'  -- omitted with --all-projects
+  AND severity = 'critical'  -- from field prefix, if any
 ORDER BY relevance
 LIMIT 20;
 ```
 
-**Auto-fetch:** If cache is missing or expired (past TTL), fetch from all providers (or `--provider` if specified) before searching.
+**Auto-fetch:** If cache is missing or expired (past TTL) for the current project, fetch from all providers (or `--provider` if specified) before searching.
 
-**`--all-projects`:** Opens each project's `vulns.db` sequentially, runs the search query, and merges results. Results include a `project` column showing which project-key the result came from.
+**`--all-projects`:** Omits the `WHERE project_key = ?` clause, searching across all cached projects in a single query. Results include the `project_key` column to identify the source project.
 
 ### `argus show <id>`
 
@@ -205,9 +211,9 @@ $ argus show SNYK-RUBY-RACKSESSION-15928857
 internal/
   cache/
     cache.go          # Cache manager: project key derivation, TTL checks,
-                      #   cache directory management, meta read/write
+                      #   database path resolution, meta read/write
     store.go          # Stoolap database operations: schema creation,
-                      #   bulk insert, clear, query execution
+                      #   bulk insert, clear by project, query execution
   search/
     search.go         # Query parser: splits input into field filters
                       #   and bare-word semantic query
@@ -227,18 +233,23 @@ cmd/
 // Manager handles cache lifecycle for a project.
 type Manager struct {
     projectKey string
-    cacheDir   string
+    dbPath     string  // ~/.cache/argus/vulns.db
     ttl        time.Duration
+    store      *Store
 }
 
 // ProjectKey derives the cache key from the working directory.
 // "/home/user/projects/my-app" -> "-home-user-projects-my-app"
 func ProjectKey() string
 
-// IsValid checks if the cache exists and is within TTL.
+// DBPath returns the shared database path.
+// Respects $XDG_CACHE_HOME, defaults to ~/.cache/argus/vulns.db
+func DBPath() string
+
+// IsValid checks if the current project's cache exists and is within TTL.
 func (m *Manager) IsValid() bool
 
-// EnsureFresh auto-fetches if cache is missing or expired.
+// EnsureFresh auto-fetches if cache is missing or expired for the current project.
 // providerScope: "all", "snyk", or "github"
 func (m *Manager) EnsureFresh(ctx context.Context, cfg *config.Config, providerScope string, verbose bool) error
 ```
@@ -251,18 +262,23 @@ type Store struct {
     db *stoolap.DB  // or *sql.DB via database/sql driver
 }
 
-// Open opens or creates the cache database, ensuring schema exists.
+// Open opens or creates the shared cache database, ensuring schema exists.
 func Open(dbPath string) (*Store, error)
 
-// WriteVulnerabilities clears existing data for the given providers
+// WriteVulnerabilities clears existing data for the given project+providers
 // and inserts new vulnerabilities with embeddings.
-func (s *Store) WriteVulnerabilities(ctx context.Context, vulns []provider.Vulnerability, providers []string) error
+func (s *Store) WriteVulnerabilities(ctx context.Context, projectKey string, vulns []provider.Vulnerability, providers []string) error
 
-// Search executes a parsed query and returns matching vulnerabilities.
-func (s *Store) Search(ctx context.Context, q search.Query, limit int) ([]SearchResult, error)
+// Search executes a parsed query against a project (or all projects).
+// If projectKey is empty, searches all projects.
+func (s *Store) Search(ctx context.Context, projectKey string, q search.Query, limit int) ([]SearchResult, error)
 
 // GetByID looks up a vulnerability by exact ID or CVE match.
-func (s *Store) GetByID(ctx context.Context, id string) (*provider.Vulnerability, error)
+// If projectKey is empty, searches all projects.
+func (s *Store) GetByID(ctx context.Context, projectKey string, id string) (*provider.Vulnerability, error)
+
+// Clear deletes cached data for a project, or all data if projectKey is empty.
+func (s *Store) Clear(ctx context.Context, projectKey string) error
 ```
 
 ```go
@@ -323,4 +339,4 @@ type SearchResult struct {
 
 1. **Stoolap Go driver + semantic feature**: Do the prebuilt shared libraries in `stoolap-go` include the `semantic` feature flag? If not, we may need custom builds or to check with the stoolap maintainers.
 2. ~~**Result limit defaults**: `search` defaults to 20 results. Should this be configurable via `--limit`?~~ **Resolved:** Yes, `--limit` flag added with default of 20.
-3. **Cache size management**: Should there be a max cache age beyond TTL that auto-purges old project caches? (Leaning no for v1 — `cache clear --all` is sufficient.)
+3. **Cache size management**: Should there be a max cache age beyond TTL that auto-purges old project data? (Leaning no for v1 — `cache clear --all` is sufficient. The single DB makes this easy to add later via `DELETE FROM vulnerabilities WHERE project_key IN (SELECT project_key FROM cache_meta WHERE value < ?)`.)
