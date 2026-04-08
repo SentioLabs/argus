@@ -32,6 +32,7 @@ Supported field prefixes: severity, package, repo, repository, provider, cve, id
 
 var (
 	searchProvider    string
+	searchRepo        string
 	searchAllProjects bool
 	searchRefresh     bool
 	searchLimit       int
@@ -42,6 +43,7 @@ func init() {
 	rootCmd.AddCommand(searchCmd)
 
 	searchCmd.Flags().StringVar(&searchProvider, "provider", "", "scope to provider (snyk or github)")
+	searchCmd.Flags().StringVar(&searchRepo, "repo", "", "filter by repository (case-insensitive substring match)")
 	searchCmd.Flags().BoolVar(&searchAllProjects, "all-projects", false, "search all cached projects")
 	searchCmd.Flags().BoolVar(&searchRefresh, "refresh", false, "force cache refresh before searching")
 	searchCmd.Flags().IntVar(&searchLimit, "limit", 20, "max results")
@@ -84,7 +86,18 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 	// If --provider flag is set, add it to query filters
 	if searchProvider != "" {
+		if q.Filters == nil {
+			q.Filters = make(map[string]string)
+		}
 		q.Filters["provider"] = searchProvider
+	}
+
+	// If --repo flag is set, add case-insensitive substring match
+	if searchRepo != "" {
+		if q.Filters == nil {
+			q.Filters = make(map[string]string)
+		}
+		q.Filters["repository"] = "*" + searchRepo + "*"
 	}
 
 	// Determine projectKey

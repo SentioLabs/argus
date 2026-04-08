@@ -238,10 +238,10 @@ func (s *Store) Search(ctx context.Context, projectKey string, q search.Query, l
 			args = append(args, value)
 		case "package", "repository", "cve", "id":
 			if strings.ContainsAny(value, "*?") {
-				where = append(where, field+" LIKE ?")
+				where = append(where, "LOWER("+field+") LIKE LOWER(?)")
 				args = append(args, globToLike(value))
 			} else {
-				where = append(where, field+" = ?")
+				where = append(where, "LOWER("+field+") = LOWER(?)")
 				args = append(args, value)
 			}
 		}
