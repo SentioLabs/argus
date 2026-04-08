@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.0](https://github.com/SentioLabs/argus/compare/v0.4.0...v0.5.0) (2026-04-08)
+
+
+### Features
+
+* add linux/arm64 builds by compiling stoolap from source in CI ([a041dde](https://github.com/SentioLabs/argus/commit/a041ddef9de2140f8b1e4d54a093406b41d664a7))
+
+
+### Bug Fixes
+
+* enable CGo for stoolap-go and limit goreleaser to linux/amd64 ([7110ee8](https://github.com/SentioLabs/argus/commit/7110ee8b543d78be4478922f45830573f14db1ee))
+* use goreleaser split/merge pattern for native CGo builds ([505c19b](https://github.com/SentioLabs/argus/commit/505c19b5d22e7adaec6e928bf76b91b561cbe09b))
+* use matrix runners for native CGo builds across platforms ([9a3a54c](https://github.com/SentioLabs/argus/commit/9a3a54c97ee58f340031ba75cf73cea0a58e49d9))
+
 ## [0.4.0](https://github.com/SentioLabs/argus/compare/v0.3.1...v0.4.0) (2026-04-08)
 
 
