@@ -52,7 +52,10 @@ jobs:
           git clone --depth 1 --branch "${STOOLAP_VERSION}" https://github.com/stoolap/stoolap.git /tmp/stoolap
           cd /tmp/stoolap
           cargo build --release --features semantic
-          echo "STOOLAP_LIB=$(pwd)/target/release" >> "$GITHUB_ENV"
+          LIBDIR="$(pwd)/target/release"
+          echo "STOOLAP_LIB=${LIBDIR}" >> "$GITHUB_ENV"
+          echo "CGO_LDFLAGS=-L${LIBDIR}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=${LIBDIR}" >> "$GITHUB_ENV"
 
       - name: Verify modules
         run: go mod verify
