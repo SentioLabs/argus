@@ -38,6 +38,10 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/stoolap/stoolap-go v0.4.0 // indirect
+	github.com/stoolap/stoolap-go/lib/darwin_arm64 v0.4.0 // indirect
+	github.com/stoolap/stoolap-go/lib/linux_amd64 v0.4.0 // indirect
+	github.com/stoolap/stoolap-go/lib/windows_amd64 v0.4.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/trivago/tgo v1.0.7 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect

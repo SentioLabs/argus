@@ -9,8 +9,7 @@ import (
 
 const DefaultTTL = 24 * time.Hour
 
-// Store is defined in store.go
-type Store struct{}
+// Store is defined in store.go.
 
 // Manager holds the configuration for cache operations.
 type Manager struct {
