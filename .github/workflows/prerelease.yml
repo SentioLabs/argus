@@ -1,0 +1,101 @@
+name: Pre-release
+
+on:
+  push:
+    tags:
+      - 'v*-rc*'
+      - 'v*-beta*'
+      - 'v*-alpha*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            build_stoolap: false
+          - runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            build_stoolap: true
+          - runner: macos-latest
+            goos: darwin
+            goarch: arm64
+            build_stoolap: false
+    runs-on: ${{ matrix.runner }}
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install Rust toolchain
+        if: matrix.build_stoolap
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build stoolap native library
+        if: matrix.build_stoolap
+        run: |
+          STOOLAP_VERSION=$(grep 'stoolap/stoolap-go ' go.mod | awk '{print $2}')
+          git clone --depth 1 --branch "${STOOLAP_VERSION}" https://github.com/stoolap/stoolap.git /tmp/stoolap
+          cd /tmp/stoolap
+          cargo build --release --features semantic
+          echo "STOOLAP_LIB=$(pwd)/target/release" >> "$GITHUB_ENV"
+
+      - name: Build with GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: build --single-target --split
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: dist-*
+          merge-multiple: true
+
+      - name: Merge and release
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: continue --merge
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
