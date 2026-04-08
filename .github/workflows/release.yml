@@ -22,10 +22,22 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  goreleaser:
+  build:
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+          - runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+          - runner: macos-latest
+            goos: darwin
+            goarch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,11 +50,45 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: release --clean
+      - name: Build
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CGO_ENABLED: "1"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          VERSION="${TAG_NAME#v}"
+          COMMIT=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          go build -ldflags "-s -w \
+            -X github.com/sentiolabs/argus/cmd.Version=${VERSION} \
+            -X github.com/sentiolabs/argus/cmd.Commit=${COMMIT} \
+            -X github.com/sentiolabs/argus/cmd.BuildDate=${BUILD_DATE}" \
+            -o argus .
+          tar czf "argus_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz" argus
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: argus-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: argus_*.tar.gz
+
+  release:
+    needs: [release-please, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum argus_*.tar.gz > checksums.txt
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: gh release upload "$TAG_NAME" dist/* --repo "$GITHUB_REPOSITORY"
