@@ -165,3 +165,117 @@ func truncate(s string, maxLen int) string {
 	}
 	return s[:maxLen-3] + "..."
 }
+
+// SearchResultRow represents a single search result for display.
+type SearchResultRow struct {
+	Provider   string `json:"provider"`
+	Severity   string `json:"severity"`
+	ID         string `json:"id"`
+	CVE        string `json:"cve,omitempty"`
+	Package    string `json:"package"`
+	Repository string `json:"repository"`
+}
+
+// PrintSearch outputs search results in the specified format.
+func PrintSearch(results []SearchResultRow, format string) error {
+	switch strings.ToLower(format) {
+	case "json":
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(results)
+	default:
+		return printSearchTable(results)
+	}
+}
+
+func printSearchTable(results []SearchResultRow) error {
+	table := tablewriter.NewTable(os.Stdout)
+	table.Header("Provider", "Severity", "ID", "CVE", "Package", "Repository")
+
+	for i := range results {
+		r := &results[i]
+		_ = table.Append(
+			r.Provider,
+			r.Severity,
+			truncate(r.ID, 38),
+			truncate(r.CVE, 16),
+			truncate(r.Package, 25),
+			truncate(r.Repository, 32),
+		)
+	}
+
+	_ = table.Render()
+	fmt.Printf("\n%d results\n", len(results))
+	return nil
+}
+
+// VulnDetail contains all fields for the detailed single-vulnerability view.
+type VulnDetail struct {
+	ID           string  `json:"id"`
+	CVE          string  `json:"cve,omitempty"`
+	Severity     string  `json:"severity"`
+	CVSS         float64 `json:"cvss"`
+	Package      string  `json:"package"`
+	Version      string  `json:"version,omitempty"`
+	FixedVersion string  `json:"fixed_version,omitempty"`
+	Repository   string  `json:"repository"`
+	Provider     string  `json:"provider"`
+	DiscoveredAt string  `json:"discovered_at,omitempty"`
+	URL          string  `json:"url,omitempty"`
+	Description  string  `json:"description,omitempty"`
+	ProjectKey   string  `json:"project_key,omitempty"`
+}
+
+// FormatDetail returns a human-readable detailed view of a single vulnerability.
+func FormatDetail(d VulnDetail) string {
+	var b strings.Builder
+
+	line := func(label, value string) {
+		fmt.Fprintf(&b, "  %-14s %s\n", label, value)
+	}
+
+	line("ID:", d.ID)
+	if d.CVE != "" {
+		line("CVE:", d.CVE)
+	}
+	line("Severity:", d.Severity)
+	line("CVSS:", fmt.Sprintf("%.1f", d.CVSS))
+
+	pkg := d.Package
+	if d.Version != "" {
+		pkg = fmt.Sprintf("%s (%s)", d.Package, d.Version)
+	}
+	line("Package:", pkg)
+
+	if d.FixedVersion != "" {
+		line("Fixed In:", d.FixedVersion)
+	}
+	line("Repository:", d.Repository)
+	line("Provider:", d.Provider)
+	if d.DiscoveredAt != "" {
+		line("Discovered:", d.DiscoveredAt)
+	}
+	if d.URL != "" {
+		line("URL:", d.URL)
+	}
+	if d.ProjectKey != "" {
+		line("Project:", d.ProjectKey)
+	}
+	if d.Description != "" {
+		fmt.Fprintf(&b, "\n  Description:\n  %s\n", d.Description)
+	}
+
+	return b.String()
+}
+
+// PrintDetail outputs a detailed vulnerability view in the specified format.
+func PrintDetail(d VulnDetail, format string) error {
+	if strings.ToLower(format) == "json" {
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(d)
+	}
+	fmt.Println()
+	fmt.Print(FormatDetail(d))
+	return nil
+}

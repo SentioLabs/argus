@@ -1,4 +1,4 @@
-.PHONY: help build run test lint clean release release-dry-run changelog
+.PHONY: help build run test lint clean release-snapshot
 
 BINARY_NAME := argus
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -59,30 +59,10 @@ verify: build
 version: build
 	./$(BINARY_NAME) version
 
-## changelog: Generate changelog for unreleased changes
-changelog:
-	@git-cliff --unreleased
+## install: Install argus via go install with version info
+install:
+	go install -ldflags="$(LDFLAGS)" .
 
-## release-dry-run: Preview what the next release would look like
-release-dry-run:
-	@echo "Current version: $$(git describe --tags --abbrev=0 2>/dev/null || echo 'none')"
-	@echo "Next version: $$(git-cliff --bumped-version 2>/dev/null || echo 'v0.0.1')"
-	@echo ""
-	@echo "Changelog preview:"
-	@git-cliff --unreleased --strip header
-
-## release: Create a new release (auto-bump version based on commits)
-release:
-	@if [ -n "$$(git status --porcelain)" ]; then \
-		echo "Error: Working directory not clean. Commit or stash changes first."; \
-		exit 1; \
-	fi
-	@NEXT_VERSION=$$(git-cliff --bumped-version 2>/dev/null || echo "v0.0.1"); \
-	echo "Creating release $$NEXT_VERSION..."; \
-	git-cliff --tag $$NEXT_VERSION -o CHANGELOG.md; \
-	git add CHANGELOG.md; \
-	git commit -m "chore(release): $$NEXT_VERSION"; \
-	git tag -a $$NEXT_VERSION -m "Release $$NEXT_VERSION"; \
-	echo ""; \
-	echo "Release $$NEXT_VERSION created!"; \
-	echo "Run 'git push && git push --tags' to publish"
+## release-snapshot: Build release snapshot locally (no tag required)
+release-snapshot:
+	goreleaser release --snapshot --clean

@@ -5,6 +5,8 @@ A CLI tool that syncs security vulnerabilities from GitHub Dependabot and Snyk t
 ## Features
 
 - **Multi-provider support**: Fetch vulnerabilities from GitHub Dependabot and Snyk
+- **Local cache with semantic search**: Persistent Stoolap-backed cache with natural-language search via built-in embeddings
+- **Targeted lookups**: Search by keyword, CVE, Snyk ID, severity, package, or repository
 - **Jira integration**: Automatically create and update Jira tickets
 - **Cross-provider deduplication**: Merge vulnerabilities by CVE across providers into unified tickets
 - **Duplicate detection**: Finds existing open tickets and adds informative comments instead of creating duplicates
@@ -18,16 +20,30 @@ A CLI tool that syncs security vulnerabilities from GitHub Dependabot and Snyk t
 
 ## Installation
 
+### Quick install (Linux & macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sentiolabs/argus/main/scripts/install.sh | bash
+```
+
+Install a specific version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sentiolabs/argus/main/scripts/install.sh | bash -s -- --tag=v0.4.0
+```
+
+### Go install
+
 ```bash
 go install github.com/sentiolabs/argus@latest
 ```
 
-Or build from source:
+### Build from source
 
 ```bash
 git clone https://github.com/sentiolabs/argus.git
 cd argus
-go build .
+make build
 ```
 
 ### Docker
@@ -206,6 +222,44 @@ This is useful for:
 - Testing provider configuration
 - Debugging API connectivity
 - Previewing what will be synced
+
+### Search and lookup vulnerabilities
+
+Argus includes a persistent cache backed by [Stoolap](https://stoolap.io/) with built-in semantic search, enabling fast lookups without re-fetching from APIs.
+
+```bash
+# Fetch and cache vulnerabilities
+argus cache refresh                     # all providers
+argus cache refresh --provider snyk     # snyk only
+
+# Check cache status
+argus cache status
+
+# Search by keyword (semantic search)
+argus search "session handling auth bypass"
+
+# Search by field filters
+argus search "severity:critical"
+argus search "package:rack* provider:snyk"
+
+# Combine semantic search with field filters
+argus search "rails" --provider snyk --repo bactrack/view-api
+
+# Look up a specific vulnerability by ID or CVE
+argus show SNYK-RUBY-RACKSESSION-15928857
+argus show CVE-2025-27610
+
+# Search across all cached projects
+argus search "severity:high" --all-projects
+
+# JSON output
+argus search "rails" --output json
+argus show CVE-2025-27610 --output json
+```
+
+Supported search field prefixes: `severity:`, `package:`, `repo:`, `provider:`, `cve:`, `id:`
+
+The cache is stored at `~/.cache/argus/vulns.db` with a 24-hour TTL. Search and show commands auto-fetch if the cache is expired.
 
 ## How It Works
 
