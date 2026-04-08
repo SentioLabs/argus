@@ -44,7 +44,7 @@ func testVulns() []provider.Vulnerability {
 
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := Open("memory://")
+	s, err := Open(":memory:")
 	require.NoError(t, err)
 	t.Cleanup(func() { s.Close() })
 	return s

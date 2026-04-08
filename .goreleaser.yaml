@@ -9,7 +9,7 @@ before:
 
 builds:
   - env:
-      - CGO_ENABLED=1
+      - CGO_ENABLED=0
     goos:
       - linux
       - darwin
@@ -21,11 +21,6 @@ builds:
       - -X github.com/sentiolabs/argus/cmd.Version={{.Version}}
       - -X github.com/sentiolabs/argus/cmd.Commit={{.ShortCommit}}
       - -X github.com/sentiolabs/argus/cmd.BuildDate={{.Date}}
-    ignore:
-      - goos: linux
-        goarch: arm64
-      - goos: darwin
-        goarch: amd64
 
 archives:
   - formats:
@@ -36,6 +31,9 @@ archives:
 checksum:
   name_template: 'checksums.txt'
   algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
 
 changelog:
   use: git

@@ -33,7 +33,12 @@ func NewManager(ttl time.Duration, verbose bool) (*Manager, error) {
 	}
 
 	dbPath := DBPath()
-	store, err := Open("file://" + dbPath)
+	// Ensure parent directory exists
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		return nil, fmt.Errorf("failed to create cache directory: %w", err)
+	}
+
+	store, err := Open(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open cache database: %w", err)
 	}
