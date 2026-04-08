@@ -5,10 +5,15 @@ project_name: argus
 before:
   hooks:
     - go mod tidy
+    - go mod verify
 
 builds:
   - env:
       - CGO_ENABLED=1
+    goos:
+      - "{{ .Env.GOOS }}"
+    goarch:
+      - "{{ .Env.GOARCH }}"
     ldflags:
       - -s -w
       - -X github.com/sentiolabs/argus/cmd.Version={{.Version}}
@@ -23,6 +28,7 @@ archives:
 
 checksum:
   name_template: 'checksums.txt'
+  algorithm: sha256
 
 changelog:
   use: git
@@ -37,18 +43,17 @@ changelog:
     - title: Performance
       regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
       order: 2
-    - title: Documentation
-      regexp: '^.*?docs?(\([[:word:]]+\))??!?:.+$'
+    - title: Refactoring
+      regexp: '^.*?refactor(\([[:word:]]+\))??!?:.+$'
       order: 3
     - title: Other
       order: 999
   filters:
     exclude:
-      - '^chore\(release\)'
-      - '^docs:'
-      - '^test:'
-      - Merge pull request
-      - Merge branch
+      - '^chore'
+      - '^docs'
+      - '^test'
+      - '^Merge'
 
 release:
   github:
@@ -56,4 +61,4 @@ release:
     name: argus
   draft: false
   prerelease: auto
-  name_template: "{{.Tag}}"
+  name_template: "v{{.Version}}"

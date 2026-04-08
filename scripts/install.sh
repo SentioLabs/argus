@@ -90,7 +90,7 @@ compare_versions() {
 # ============ Platform Detection ============
 
 detect_platform() {
-    local os arch
+    local os arch platform
 
     case "$(uname -s)" in
         Darwin)
@@ -118,7 +118,20 @@ detect_platform() {
             ;;
     esac
 
-    echo "${os}_${arch}"
+    platform="${os}_${arch}"
+
+    # Validate against supported platforms (stoolap-go native lib availability)
+    case "$platform" in
+        linux_amd64|darwin_arm64)
+            ;;
+        *)
+            log_error "No prebuilt binary for ${platform}"
+            log_error "Install with: go install github.com/sentiolabs/argus@latest"
+            exit 1
+            ;;
+    esac
+
+    echo "$platform"
 }
 
 # ============ macOS Code Signing ============

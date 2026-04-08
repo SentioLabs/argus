@@ -31,13 +31,13 @@ jobs:
           - runner: ubuntu-latest
             goos: linux
             goarch: amd64
-          - runner: ubuntu-24.04-arm
-            goos: linux
-            goarch: arm64
           - runner: macos-latest
             goos: darwin
             goarch: arm64
     runs-on: ${{ matrix.runner }}
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,45 +50,48 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Build
+      - name: Build with GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: build --single-target --split
         env:
-          CGO_ENABLED: "1"
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
-        run: |
-          VERSION="${TAG_NAME#v}"
-          COMMIT=$(git rev-parse --short HEAD)
-          BUILD_DATE=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-          go build -ldflags "-s -w \
-            -X github.com/sentiolabs/argus/cmd.Version=${VERSION} \
-            -X github.com/sentiolabs/argus/cmd.Commit=${COMMIT} \
-            -X github.com/sentiolabs/argus/cmd.BuildDate=${BUILD_DATE}" \
-            -o argus .
-          tar czf "argus_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz" argus
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: argus-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: argus_*.tar.gz
+          name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
 
   release:
     needs: [release-please, build]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: dist-*
           merge-multiple: true
 
-      - name: Generate checksums
-        working-directory: dist
-        run: sha256sum argus_*.tar.gz > checksums.txt
-
-      - name: Upload release assets
+      - name: Merge and release
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: continue --merge
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
-        run: gh release upload "$TAG_NAME" dist/* --repo "$GITHUB_REPOSITORY"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
