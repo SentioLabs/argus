@@ -14,6 +14,7 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
@@ -21,6 +22,13 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      - name: Extract version
+        id: version
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        env:
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
   build:
     needs: release-please
@@ -42,8 +50,7 @@ jobs:
             build_stoolap: false
     runs-on: ${{ matrix.runner }}
     env:
-      GOOS: ${{ matrix.goos }}
-      GOARCH: ${{ matrix.goarch }}
+      CGO_ENABLED: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,48 +76,45 @@ jobs:
           cargo build --release --features semantic
           echo "STOOLAP_LIB=$(pwd)/target/release" >> "$GITHUB_ENV"
 
-      - name: Build with GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: build --single-target --split
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify modules
+        run: go mod verify
 
-      - name: Upload artifacts
+      - name: Build
+        env:
+          VERSION: ${{ needs.release-please.outputs.version }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          COMMIT=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          go build -ldflags "-s -w \
+            -X github.com/sentiolabs/argus/cmd.Version=${VERSION} \
+            -X github.com/sentiolabs/argus/cmd.Commit=${COMMIT} \
+            -X github.com/sentiolabs/argus/cmd.BuildDate=${BUILD_DATE}" \
+            -o argus .
+          tar czf "argus_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz" argus
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/
+          name: argus-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: argus_*.tar.gz
 
   release:
     needs: [release-please, build]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.release-please.outputs.tag_name }}
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
-          pattern: dist-*
           merge-multiple: true
 
-      - name: Merge and release
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: continue --merge
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum argus_*.tar.gz > checksums.txt
+
+      - name: Upload release assets
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY"
