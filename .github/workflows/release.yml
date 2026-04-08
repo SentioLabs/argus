@@ -39,15 +39,9 @@ jobs:
           - runner: ubuntu-latest
             goos: linux
             goarch: amd64
-            build_stoolap: false
-          - runner: ubuntu-24.04-arm
-            goos: linux
-            goarch: arm64
-            build_stoolap: true
           - runner: macos-latest
             goos: darwin
             goarch: arm64
-            build_stoolap: false
     runs-on: ${{ matrix.runner }}
     env:
       CGO_ENABLED: "1"
@@ -62,20 +56,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-
-      - name: Install Rust toolchain
-        if: matrix.build_stoolap
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build stoolap native library
-        if: matrix.build_stoolap
-        run: |
-          STOOLAP_VERSION=$(grep 'stoolap/stoolap-go ' go.mod | awk '{print $2}')
-          git clone --depth 1 --branch "${STOOLAP_VERSION}" https://github.com/stoolap/stoolap.git /tmp/stoolap
-          cd /tmp/stoolap
-          cargo build --release --features semantic
-          sudo cp target/release/libstoolap.so /usr/local/lib/
-          sudo ldconfig
 
       - name: Verify modules
         run: go mod verify
