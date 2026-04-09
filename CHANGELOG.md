@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.6.0](https://github.com/SentioLabs/argus/compare/v0.5.0...v0.6.0) (2026-04-08)
+
+
+### Features
+
+* add prerelease workflow for rc/beta/alpha tags ([5faefae](https://github.com/SentioLabs/argus/commit/5faefaef14a7d6675a56c144e366f574f8483d75))
+* swap stoolap for SQLite (modernc.org/sqlite) with FTS5 ([5fc9b09](https://github.com/SentioLabs/argus/commit/5fc9b09b7d253c66b08af33db78cab0f0778b3b9))
+
+
+### Bug Fixes
+
+* drop linux/arm64 from release builds ([ff5c631](https://github.com/SentioLabs/argus/commit/ff5c6313eb2f974534102785c421d7fe8cb0a3a5))
+* install libstoolap.so to /usr/local/lib for arm64 builds ([7090b6c](https://github.com/SentioLabs/argus/commit/7090b6c77fe298f663893831508760d63f307300))
+* replace goreleaser split/merge with native go build ([21844d8](https://github.com/SentioLabs/argus/commit/21844d8751d03f56476f3df497483945921c09d8))
+* set CGO_LDFLAGS and LD_LIBRARY_PATH for stoolap arm64 builds ([9bf8148](https://github.com/SentioLabs/argus/commit/9bf81487cf3854432acc98cb2cdf4ef2cf10dd92))
+
+
+### Refactoring
+
+* simplify to goreleaser with --single-target per runner ([fbdcbfb](https://github.com/SentioLabs/argus/commit/fbdcbfb49f7f8fcd3edb04680c650dd3673ef2cb))
+
 ## [0.5.0](https://github.com/SentioLabs/argus/compare/v0.4.0...v0.5.0) (2026-04-08)
 
 
