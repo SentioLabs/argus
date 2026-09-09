@@ -23,6 +23,9 @@ argus.yaml
 go.work
 go.work.sum
 
+# worktrees
+.worktrees
+
 # Dependency directories
 vendor/
 
