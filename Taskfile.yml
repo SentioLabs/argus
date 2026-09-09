@@ -26,12 +26,6 @@ tasks:
 
   build:
     desc: Build the argus binary into ./bin
-    sources:
-      - '**/*.go'
-      - go.mod
-      - go.sum
-    generates:
-      - '{{.CLI_BIN}}'
     cmds:
       - mkdir -p {{.BIN_DIR}}
       - '{{.GO}} build -ldflags="{{.LDFLAGS}}" -o {{.CLI_BIN}} .'
@@ -81,6 +75,7 @@ tasks:
 
   check:versions:
     desc: Assert mise.toml and go.mod agree on the Go version
+    silent: true
     cmds:
       - cmd: |
           mise_go="$(grep -E '^go[[:space:]]*=' mise.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
@@ -107,6 +102,11 @@ tasks:
     cmds:
       - task: build
       - '{{.CLI_BIN}} version'
+
+  install:
+    desc: Install argus into GOPATH/bin with version ldflags
+    cmds:
+      - '{{.GO}} install -ldflags="{{.LDFLAGS}}" .'
 
   clean:
     desc: Remove build artifacts and coverage reports
