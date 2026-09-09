@@ -99,12 +99,12 @@ func runCacheStatus(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get total count: %w", err)
 	}
 
-	providers, err := store.GetMeta(projectKey, "providers")
+	providers, err := store.GetMeta(cmd.Context(), projectKey, "providers")
 	if err != nil {
 		return fmt.Errorf("failed to get providers metadata: %w", err)
 	}
 
-	fetchedAt, err := store.GetMeta(projectKey, "fetched_at")
+	fetchedAt, err := store.GetMeta(cmd.Context(), projectKey, "fetched_at")
 	if err != nil {
 		return fmt.Errorf("failed to get fetched_at metadata: %w", err)
 	}

@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sentiolabs/argus/internal/provider"
-	"github.com/sentiolabs/argus/internal/search"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/sentiolabs/argus/internal/provider"
+	"github.com/sentiolabs/argus/internal/search"
 )
 
 func testVulns() []provider.Vulnerability {
@@ -211,25 +212,26 @@ func TestStore_WriteReplacesExistingProvider(t *testing.T) {
 
 func TestStore_Meta(t *testing.T) {
 	s := openTestStore(t)
+	ctx := context.Background()
 
 	// Set and get
-	err := s.SetMeta("proj1", "fetched_at", "2026-04-08T00:00:00Z")
+	err := s.SetMeta(ctx, "proj1", "fetched_at", "2026-04-08T00:00:00Z")
 	require.NoError(t, err)
 
-	val, err := s.GetMeta("proj1", "fetched_at")
+	val, err := s.GetMeta(ctx, "proj1", "fetched_at")
 	require.NoError(t, err)
 	assert.Equal(t, "2026-04-08T00:00:00Z", val)
 
 	// Overwrite
-	err = s.SetMeta("proj1", "fetched_at", "2026-04-09T00:00:00Z")
+	err = s.SetMeta(ctx, "proj1", "fetched_at", "2026-04-09T00:00:00Z")
 	require.NoError(t, err)
 
-	val, err = s.GetMeta("proj1", "fetched_at")
+	val, err = s.GetMeta(ctx, "proj1", "fetched_at")
 	require.NoError(t, err)
 	assert.Equal(t, "2026-04-09T00:00:00Z", val)
 
 	// Cross-project isolation
-	val2, err := s.GetMeta("proj2", "fetched_at")
+	val2, err := s.GetMeta(ctx, "proj2", "fetched_at")
 	require.NoError(t, err)
 	assert.Equal(t, "", val2, "proj2 should not have proj1's meta")
 }
