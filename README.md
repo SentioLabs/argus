@@ -61,6 +61,7 @@ argus self update          # install the newest release on your channel
 argus self update --check  # report whether an update is available, install nothing
 argus self channel         # show the current channel (stable by default)
 argus self channel rc      # follow release candidates
+argus self channel nightly # follow nightly builds from main
 ```
 
 The update downloads the release archive for your OS and architecture, verifies it against the release's `checksums.txt`, and replaces the running binary in place. Binaries managed by Homebrew, Nix, or a system package manager are refused with a hint to use that manager's upgrade command instead.
