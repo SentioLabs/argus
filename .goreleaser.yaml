@@ -27,6 +27,9 @@ archives:
       - tar.gz
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE*
 
 checksum:
   name_template: 'checksums.txt'
@@ -58,11 +61,12 @@ changelog:
       - '^chore'
       - '^docs'
       - '^test'
+      - '^ci'
       - '^Merge'
 
 release:
   github:
-    owner: SentioLabs
+    owner: sentiolabs
     name: argus
   draft: false
   prerelease: auto
