@@ -1,411 +1,87 @@
 #!/usr/bin/env bash
 #
-# Argus installation script
-# Usage: curl -fsSL https://raw.githubusercontent.com/sentiolabs/argus/main/scripts/install.sh | bash
+# Bootstrap installer for argus. Downloads one release tarball, verifies it
+# against the release's checksums.txt, and puts the binary on your PATH.
+# Everything after that is handled by `argus self update`.
+#
+#   curl -fsSL https://raw.githubusercontent.com/sentiolabs/argus/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/sentiolabs/argus/main/scripts/install.sh | bash -s -- --tag=v0.7.0
 #
 # Options:
-#   --force    Force reinstall even if already up-to-date
-#   --tag TAG  Install a specific version (e.g., v0.4.0)
+#   --tag=TAG          install a specific release tag instead of the latest stable
 #
+# Environment:
+#   ARGUS_INSTALL_DIR  target directory (default: /usr/local/bin if writable, else ~/.local/bin)
 
-set -e
-
-# ============ Configuration ============
+set -euo pipefail
 
 REPO="sentiolabs/argus"
-BINARY_NAME="argus"
-FORCE="${FORCE:-false}"
-TAG="${TAG:-}"
+TAG=""
 
-# ============ Output Formatting ============
-
-if [[ -t 1 ]] && command -v tput &> /dev/null && [[ $(tput colors 2>/dev/null || echo 0) -ge 8 ]]; then
-    RED='\033[0;31m'
-    GREEN='\033[0;32m'
-    YELLOW='\033[1;33m'
-    BLUE='\033[0;34m'
-    BOLD='\033[1m'
-    DIM='\033[2m'
-    NC='\033[0m'
-else
-    RED=''
-    GREEN=''
-    YELLOW=''
-    BLUE=''
-    BOLD=''
-    DIM=''
-    NC=''
-fi
-
-log_info() {
-    echo -e "${BLUE}→${NC} $1"
+usage() {
+    sed -n '3,14s/^# \{0,1\}//p' "${BASH_SOURCE[0]}" 2>/dev/null || echo "usage: install.sh [--tag=TAG]"
 }
 
-log_success() {
-    echo -e "${GREEN}✓${NC} $1"
-}
-
-log_warning() {
-    echo -e "${YELLOW}!${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}✗${NC} $1" >&2
-}
-
-log_step() {
-    echo -e "${DIM}  $1${NC}"
-}
-
-# ============ Version Detection ============
-
-get_installed_version() {
-    if command -v argus &> /dev/null; then
-        local version_output
-        version_output=$(argus version 2>/dev/null || echo "")
-        echo "$version_output" | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/^/v/'
-    fi
-}
-
-normalize_version() {
-    echo "$1" | sed 's/^v//'
-}
-
-compare_versions() {
-    local v1 v2
-    v1=$(normalize_version "$1")
-    v2=$(normalize_version "$2")
-
-    if [[ "$v1" == "$v2" ]]; then
-        return 0
-    fi
-
-    if printf '%s\n%s' "$v1" "$v2" | sort -V -C 2>/dev/null; then
-        return 2  # v1 < v2
-    else
-        return 1  # v1 > v2
-    fi
-}
-
-# ============ Platform Detection ============
-
-detect_platform() {
-    local os arch platform
-
-    case "$(uname -s)" in
-        Darwin)
-            os="darwin"
-            ;;
-        Linux)
-            os="linux"
-            ;;
-        *)
-            log_error "Unsupported operating system: $(uname -s)"
-            exit 1
-            ;;
-    esac
-
-    case "$(uname -m)" in
-        x86_64|amd64)
-            arch="amd64"
-            ;;
-        aarch64|arm64)
-            arch="arm64"
-            ;;
-        *)
-            log_error "Unsupported architecture: $(uname -m)"
-            exit 1
-            ;;
-    esac
-
-    platform="${os}_${arch}"
-
-    # Validate against supported platforms
-    case "$platform" in
-        linux_amd64|linux_arm64|darwin_amd64|darwin_arm64)
-            ;;
-        *)
-            log_error "No prebuilt binary for ${platform}"
-            log_error "Install with: go install github.com/sentiolabs/argus@latest"
-            exit 1
-            ;;
-    esac
-
-    echo "$platform"
-}
-
-# ============ macOS Code Signing ============
-
-resign_for_macos() {
-    local binary_path=$1
-
-    if [[ "$(uname -s)" != "Darwin" ]]; then
-        return 0
-    fi
-
-    if ! command -v codesign &> /dev/null; then
-        return 0
-    fi
-
-    log_step "Re-signing binary for macOS..."
-    codesign --remove-signature "$binary_path" 2>/dev/null || true
-    if codesign --force --sign - "$binary_path" 2>/dev/null; then
-        log_step "Binary signed"
-    fi
-}
-
-# ============ Release Asset Check ============
-
-release_has_asset() {
-    local release_json=$1
-    local asset_name=$2
-
-    if echo "$release_json" | grep -Fq "\"name\": \"$asset_name\""; then
-        return 0
-    fi
-    return 1
-}
-
-# ============ Installation ============
-
-install_from_release() {
-    local platform=$1
-    local installed_version=$2
-    local tmp_dir
-
-    tmp_dir=$(mktemp -d)
-
-    local latest_version
-    local release_json
-
-    if [[ -n "$TAG" ]]; then
-        latest_version="$TAG"
-        log_info "Installing specific version: ${latest_version}"
-        local tag_url="https://api.github.com/repos/${REPO}/releases/tags/${TAG}"
-
-        if command -v curl &> /dev/null; then
-            release_json=$(curl -fsSL "$tag_url" 2>/dev/null)
-        elif command -v wget &> /dev/null; then
-            release_json=$(wget -qO- "$tag_url" 2>/dev/null)
-        else
-            log_error "Neither curl nor wget found"
-            rm -rf "$tmp_dir"
-            return 1
-        fi
-    else
-        log_info "Checking latest release..."
-        local latest_url="https://api.github.com/repos/${REPO}/releases/latest"
-
-        if command -v curl &> /dev/null; then
-            release_json=$(curl -fsSL "$latest_url" 2>/dev/null)
-        elif command -v wget &> /dev/null; then
-            release_json=$(wget -qO- "$latest_url" 2>/dev/null)
-        else
-            log_error "Neither curl nor wget found"
-            rm -rf "$tmp_dir"
-            return 1
-        fi
-
-        latest_version=$(echo "$release_json" | grep '"tag_name"' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
-    fi
-
-    if [[ -z "$latest_version" ]]; then
-        log_error "Failed to fetch latest version"
-        rm -rf "$tmp_dir"
-        return 1
-    fi
-
-    # Version comparison (skip for specific tag installs)
-    if [[ -z "$TAG" ]] && [[ -n "$installed_version" ]] && [[ "$FORCE" != "true" ]]; then
-        if compare_versions "$installed_version" "$latest_version"; then
-            log_success "argus ${installed_version} is already up to date"
-            rm -rf "$tmp_dir"
-            return 2
-        fi
-        log_info "Updating argus ${installed_version} → ${latest_version}"
-    else
-        log_info "Installing argus ${latest_version}"
-    fi
-
-    # Download
-    local archive_name="${BINARY_NAME}_${latest_version#v}_${platform}.tar.gz"
-    local download_url="https://github.com/${REPO}/releases/download/${latest_version}/${archive_name}"
-
-    if ! release_has_asset "$release_json" "$archive_name"; then
-        log_error "No prebuilt binary for ${platform}"
-        rm -rf "$tmp_dir"
-        return 1
-    fi
-
-    log_info "Downloading ${archive_name}..."
-    cd "$tmp_dir"
-
-    if command -v curl &> /dev/null; then
-        if ! curl -fsSL --progress-bar -o "$archive_name" "$download_url"; then
-            log_error "Download failed"
-            cd - > /dev/null || cd "$HOME"
-            rm -rf "$tmp_dir"
-            return 1
-        fi
-    elif command -v wget &> /dev/null; then
-        if ! wget -q --show-progress -O "$archive_name" "$download_url" 2>/dev/null; then
-            if ! wget -q -O "$archive_name" "$download_url"; then
-                log_error "Download failed"
-                cd - > /dev/null || cd "$HOME"
-                rm -rf "$tmp_dir"
-                return 1
-            fi
-        fi
-    fi
-
-    # Extract
-    log_step "Extracting..."
-    if ! tar -xzf "$archive_name"; then
-        log_error "Failed to extract archive"
-        cd - > /dev/null || cd "$HOME"
-        rm -rf "$tmp_dir"
-        return 1
-    fi
-
-    # Determine install location
-    local install_dir
-    if [[ -w /usr/local/bin ]]; then
-        install_dir="/usr/local/bin"
-    else
-        install_dir="$HOME/.local/bin"
-        mkdir -p "$install_dir"
-    fi
-
-    # Install
-    log_step "Installing to ${install_dir}..."
-    if [[ -w "$install_dir" ]]; then
-        mv "$BINARY_NAME" "$install_dir/"
-    else
-        sudo mv "$BINARY_NAME" "$install_dir/"
-    fi
-
-    resign_for_macos "$install_dir/$BINARY_NAME"
-
-    cd - > /dev/null || cd "$HOME"
-    rm -rf "$tmp_dir"
-
-    log_success "Installed argus ${latest_version} to ${install_dir}/${BINARY_NAME}"
-
-    # PATH warning
-    if [[ ":$PATH:" != *":$install_dir:"* ]]; then
-        echo ""
-        log_warning "${install_dir} is not in your PATH"
-        echo -e "  Add to your shell profile: ${BOLD}export PATH=\"\$PATH:$install_dir\"${NC}"
-    fi
-
-    return 0
-}
-
-# ============ Verification ============
-
-verify_installation() {
-    if ! command -v argus &> /dev/null; then
-        return 1
-    fi
-
-    echo ""
-    echo -e "${BOLD}argus${NC} is ready!"
-    echo ""
-    argus version 2>/dev/null || echo "argus (development build)"
-    echo ""
-    echo "Get started:"
-    echo "  argus config init       Create example config"
-    echo "  argus verify --provider snyk    Preview vulnerabilities"
-    echo "  argus cache refresh     Fetch and cache vulnerabilities"
-    echo "  argus search \"rails\"    Search cached vulnerabilities"
-    echo ""
-}
-
-# ============ Help ============
-
-show_help() {
-    echo "Argus Installer"
-    echo ""
-    echo "Usage: $0 [options]"
-    echo ""
-    echo "Options:"
-    echo "  --force        Force reinstall even if already up-to-date"
-    echo "  --tag TAG      Install a specific version (e.g., v0.4.0)"
-    echo "  --help         Show this help message"
-    echo ""
-    echo "Examples:"
-    echo "  curl -fsSL https://raw.githubusercontent.com/sentiolabs/argus/main/scripts/install.sh | bash"
-    echo "  curl -fsSL ... | bash -s -- --force"
-    echo "  curl -fsSL ... | bash -s -- --tag=v0.4.0"
-    echo ""
-}
-
-# ============ Main ============
-
-main() {
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --force|-f)
-                FORCE="true"
-                shift
-                ;;
-            --tag)
-                TAG="$2"
-                shift 2
-                ;;
-            --tag=*)
-                TAG="${1#*=}"
-                shift
-                ;;
-            --help|-h)
-                show_help
-                exit 0
-                ;;
-            *)
-                log_error "Unknown option: $1"
-                show_help
-                exit 1
-                ;;
-        esac
-    done
-
-    echo ""
-    echo -e "${BOLD}Argus Installer${NC}"
-    echo ""
-
-    local platform
-    platform=$(detect_platform)
-    log_step "Platform: ${platform}"
-
-    local installed_version
-    installed_version=$(get_installed_version)
-    if [[ -n "$installed_version" ]]; then
-        log_step "Installed: ${installed_version}"
-    fi
-
-    local result
-    if install_from_release "$platform" "$installed_version"; then
-        verify_installation
-        exit 0
-    else
-        result=$?
-        if [[ $result -eq 2 ]]; then
-            exit 0
-        fi
-    fi
-
-    echo ""
-    log_error "Installation failed"
-    echo ""
-    echo "Alternative installation methods:"
-    echo ""
-    echo "  1. Download from https://github.com/${REPO}/releases/latest"
-    echo "     Extract and move 'argus' to your PATH"
-    echo ""
-    echo "  2. Install with Go (requires Go 1.25+):"
-    echo "     go install github.com/${REPO}@latest"
-    echo ""
+die() {
+    echo "install.sh: $*" >&2
     exit 1
 }
 
-main "$@"
+for arg in "$@"; do
+    case "$arg" in
+        --tag=*) TAG="${arg#--tag=}" ;;
+        -h|--help) usage; exit 0 ;;
+        *) die "unknown option: $arg (try --help)" ;;
+    esac
+done
+
+command -v curl >/dev/null || die "curl is required"
+command -v tar >/dev/null || die "tar is required"
+
+case "$(uname -s)" in
+    Linux)  os=linux ;;
+    Darwin) os=darwin ;;
+    *)      die "unsupported operating system: $(uname -s)" ;;
+esac
+case "$(uname -m)" in
+    x86_64|amd64)  arch=amd64 ;;
+    aarch64|arm64) arch=arm64 ;;
+    *)             die "unsupported architecture: $(uname -m)" ;;
+esac
+
+if [ -z "$TAG" ]; then
+    TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+        | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
+    [ -n "$TAG" ] || die "could not determine the latest release"
+fi
+
+asset="argus_${TAG#v}_${os}_${arch}.tar.gz"
+base="https://github.com/${REPO}/releases/download/${TAG}"
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+echo "downloading ${asset}"
+curl -fsSL -o "${tmp}/${asset}" "${base}/${asset}" || die "no asset ${asset} in release ${TAG}"
+curl -fsSL -o "${tmp}/checksums.txt" "${base}/checksums.txt" || die "release ${TAG} has no checksums.txt"
+
+if command -v sha256sum >/dev/null; then
+    (cd "$tmp" && grep "  ${asset}\$" checksums.txt | sha256sum -c --quiet) || die "checksum mismatch for ${asset}"
+else
+    (cd "$tmp" && grep "  ${asset}\$" checksums.txt | shasum -a 256 -c --quiet) || die "checksum mismatch for ${asset}"
+fi
+
+tar -xzf "${tmp}/${asset}" -C "$tmp" argus
+
+dir="${ARGUS_INSTALL_DIR:-}"
+if [ -z "$dir" ]; then
+    if [ -w /usr/local/bin ]; then dir=/usr/local/bin; else dir="${HOME}/.local/bin"; fi
+fi
+mkdir -p "$dir"
+install -m 0755 "${tmp}/argus" "${dir}/argus"
+
+echo "installed argus ${TAG} to ${dir}/argus"
+case ":${PATH}:" in
+    *":${dir}:"*) ;;
+    *) echo "note: ${dir} is not on your PATH" ;;
+esac
+echo "update later with: argus self update"
