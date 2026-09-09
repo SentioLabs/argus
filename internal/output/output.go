@@ -270,7 +270,7 @@ func FormatDetail(d VulnDetail) string {
 
 // PrintDetail outputs a detailed vulnerability view in the specified format.
 func PrintDetail(d VulnDetail, format string) error {
-	if strings.ToLower(format) == "json" {
+	if strings.EqualFold(format, "json") {
 		encoder := json.NewEncoder(os.Stdout)
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(d)

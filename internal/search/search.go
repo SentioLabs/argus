@@ -1,3 +1,5 @@
+// Package search parses free-text queries with field filters
+// (severity:critical package:rack) into structured search terms.
 package search
 
 import (

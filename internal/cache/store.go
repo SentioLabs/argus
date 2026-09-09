@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -10,7 +11,7 @@ import (
 	"github.com/sentiolabs/argus/internal/provider"
 	"github.com/sentiolabs/argus/internal/search"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
 )
 
 // Store wraps a SQLite database connection for vulnerability caching.
@@ -34,15 +35,15 @@ func Open(dsn string) (*Store, error) {
 	}
 
 	// Enable WAL mode for better concurrent read performance
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		db.Close()
+	if _, err := db.ExecContext(context.Background(), "PRAGMA journal_mode=WAL"); err != nil {
+		_ = db.Close()
 		return nil, fmt.Errorf("set WAL mode: %w", err)
 	}
 
 	s := &Store{db: db}
 
 	if err := s.initSchema(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
 
@@ -90,7 +91,7 @@ func (s *Store) initSchema() error {
 	}
 
 	for _, stmt := range stmts {
-		if _, err := s.db.Exec(stmt); err != nil {
+		if _, err := s.db.ExecContext(context.Background(), stmt); err != nil {
 			return fmt.Errorf("schema exec: %w\nSQL: %s", err, stmt)
 		}
 	}
@@ -131,15 +132,16 @@ func (s *Store) WriteVulnerabilities(ctx context.Context, projectKey string, vul
 	if err != nil {
 		return fmt.Errorf("prepare insert: %w", err)
 	}
-	defer insertVuln.Close()
+	defer func() { _ = insertVuln.Close() }()
 
 	insertFTS, err := tx.PrepareContext(ctx, `INSERT INTO vuln_fts (rowid, content) VALUES (?, ?)`)
 	if err != nil {
 		return fmt.Errorf("prepare fts insert: %w", err)
 	}
-	defer insertFTS.Close()
+	defer func() { _ = insertFTS.Close() }()
 
-	for _, v := range vulns {
+	for i := range vulns {
+		v := &vulns[i]
 		var discoveredAt *string
 		if !v.DiscoveredAt.IsZero() {
 			s := v.DiscoveredAt.Format(time.RFC3339)
@@ -303,7 +305,7 @@ func (s *Store) queryResults(ctx context.Context, query string, args []interface
 	if err != nil {
 		return nil, fmt.Errorf("search query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []SearchResult
 	for rows.Next() {
@@ -342,6 +344,14 @@ func (s *Store) queryResults(ctx context.Context, query string, args []interface
 	return results, rows.Err()
 }
 
+// getByIDQueryTmpl is the GetByID query with a %s placeholder for the WHERE clause.
+const getByIDQueryTmpl = `
+	SELECT project_key, id, cve, severity, cvss, package, version, fixed_version,
+		   repository, description, url, discovered_at, provider
+	FROM vulnerabilities
+	WHERE %s
+	LIMIT 1`
+
 // GetByID fetches a single vulnerability by ID or CVE, with optional project filter.
 // Returns nil, nil if not found.
 func (s *Store) GetByID(ctx context.Context, projectKey string, id string) (*provider.Vulnerability, error) {
@@ -357,12 +367,7 @@ func (s *Store) GetByID(ctx context.Context, projectKey string, id string) (*pro
 			args = append(args, projectKey)
 		}
 
-		querySQL := fmt.Sprintf(`
-			SELECT project_key, id, cve, severity, cvss, package, version, fixed_version,
-				   repository, description, url, discovered_at, provider
-			FROM vulnerabilities
-			WHERE %s
-			LIMIT 1`, strings.Join(where, " AND "))
+		querySQL := fmt.Sprintf(getByIDQueryTmpl, strings.Join(where, " AND ")) //nolint:gosec // where holds fixed column predicates; values are bound with ?
 
 		row := s.db.QueryRowContext(ctx, querySQL, args...)
 
@@ -432,10 +437,10 @@ func (s *Store) Clear(ctx context.Context, projectKey string) error {
 }
 
 // GetMeta returns a metadata value for a project key+name. Returns "" if not found.
-func (s *Store) GetMeta(projectKey, key string) (string, error) {
-	row := s.db.QueryRow(`SELECT value FROM cache_meta WHERE project_key = ? AND meta_key = ? LIMIT 1`, projectKey, key)
+func (s *Store) GetMeta(ctx context.Context, projectKey, key string) (string, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT value FROM cache_meta WHERE project_key = ? AND meta_key = ? LIMIT 1`, projectKey, key)
 	var val string
-	if err := row.Scan(&val); err == sql.ErrNoRows {
+	if err := row.Scan(&val); errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	} else if err != nil {
 		return "", fmt.Errorf("get meta %s/%s: %w", projectKey, key, err)
@@ -444,11 +449,11 @@ func (s *Store) GetMeta(projectKey, key string) (string, error) {
 }
 
 // SetMeta sets a metadata value for a project key+name (upsert via delete-then-insert).
-func (s *Store) SetMeta(projectKey, key, value string) error {
-	if _, err := s.db.Exec(`DELETE FROM cache_meta WHERE project_key = ? AND meta_key = ?`, projectKey, key); err != nil {
+func (s *Store) SetMeta(ctx context.Context, projectKey, key, value string) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM cache_meta WHERE project_key = ? AND meta_key = ?`, projectKey, key); err != nil {
 		return fmt.Errorf("delete meta %s/%s: %w", projectKey, key, err)
 	}
-	if _, err := s.db.Exec(`INSERT INTO cache_meta (project_key, meta_key, value) VALUES (?, ?, ?)`, projectKey, key, value); err != nil {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO cache_meta (project_key, meta_key, value) VALUES (?, ?, ?)`, projectKey, key, value); err != nil {
 		return fmt.Errorf("insert meta %s/%s: %w", projectKey, key, err)
 	}
 	return nil

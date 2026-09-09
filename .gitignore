@@ -1,5 +1,8 @@
 # Compiled binary
 argus
+bin/
+dist/
+.task/
 
 # Environment files (contain secrets)
 .env

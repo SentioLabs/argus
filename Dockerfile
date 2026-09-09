@@ -1,5 +1,5 @@
 # Build stage - runs on native platform for fast cross-compilation
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS builder
 
 ARG TARGETARCH
 ARG VERSION=dev

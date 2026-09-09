@@ -68,7 +68,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create cache manager: %w", err)
 	}
-	defer mgr.Close()
+	defer func() { _ = mgr.Close() }()
 
 	// If --refresh flag OR cache not valid: load config and refresh
 	if searchRefresh || !mgr.IsValid() {
@@ -119,7 +119,8 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 	// Convert to search-specific output rows
 	rows := make([]output.SearchResultRow, len(results))
-	for i, r := range results {
+	for i := range results {
+		r := &results[i]
 		rows[i] = output.SearchResultRow{
 			Provider:   r.Provider,
 			Severity:   r.Severity,

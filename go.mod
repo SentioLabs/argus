@@ -1,12 +1,13 @@
 module github.com/sentiolabs/argus
 
-go 1.25.5
+go 1.27.1
 
 require (
 	github.com/andygrunwald/go-jira/v2 v2.0.0-20250914065312-05fb5bc92aec
 	github.com/google/go-github/v57 v57.0.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/olekukonko/tablewriter v1.1.2
+	github.com/sentiolabs/selfupdate-go v0.2.0-rc.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
@@ -46,6 +47,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/trivago/tgo v1.0.7 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	golang.org/x/mod v0.33.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

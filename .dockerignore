@@ -1,5 +1,7 @@
 # Binary
 argus
+bin/
+dist/
 
 # Git
 .git

@@ -57,51 +57,51 @@ func TestParse_BareWords(t *testing.T) {
 
 func TestParse_FieldFilters(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		wantFilters map[string]string
+		name         string
+		input        string
+		wantFilters  map[string]string
 		wantSemantic string
 	}{
 		{
-			name:        "severity filter",
-			input:       "severity:critical",
-			wantFilters: map[string]string{"severity": "critical"},
+			name:         "severity filter",
+			input:        "severity:critical",
+			wantFilters:  map[string]string{"severity": "critical"},
 			wantSemantic: "",
 		},
 		{
-			name:        "package filter",
-			input:       "package:lodash",
-			wantFilters: map[string]string{"package": "lodash"},
+			name:         "package filter",
+			input:        "package:lodash",
+			wantFilters:  map[string]string{"package": "lodash"},
 			wantSemantic: "",
 		},
 		{
-			name:        "repo alias maps to repository",
-			input:       "repo:my-repo",
-			wantFilters: map[string]string{"repository": "my-repo"},
+			name:         "repo alias maps to repository",
+			input:        "repo:my-repo",
+			wantFilters:  map[string]string{"repository": "my-repo"},
 			wantSemantic: "",
 		},
 		{
-			name:        "repository long form",
-			input:       "repository:my-org/my-repo",
-			wantFilters: map[string]string{"repository": "my-org/my-repo"},
+			name:         "repository long form",
+			input:        "repository:my-org/my-repo",
+			wantFilters:  map[string]string{"repository": "my-org/my-repo"},
 			wantSemantic: "",
 		},
 		{
-			name:        "provider filter",
-			input:       "provider:github",
-			wantFilters: map[string]string{"provider": "github"},
+			name:         "provider filter",
+			input:        "provider:github",
+			wantFilters:  map[string]string{"provider": "github"},
 			wantSemantic: "",
 		},
 		{
-			name:        "cve filter",
-			input:       "cve:CVE-2023-1234",
-			wantFilters: map[string]string{"cve": "CVE-2023-1234"},
+			name:         "cve filter",
+			input:        "cve:CVE-2023-1234",
+			wantFilters:  map[string]string{"cve": "CVE-2023-1234"},
 			wantSemantic: "",
 		},
 		{
-			name:        "id filter",
-			input:       "id:SNYK-JS-LODASH-1234",
-			wantFilters: map[string]string{"id": "SNYK-JS-LODASH-1234"},
+			name:         "id filter",
+			input:        "id:SNYK-JS-LODASH-1234",
+			wantFilters:  map[string]string{"id": "SNYK-JS-LODASH-1234"},
 			wantSemantic: "",
 		},
 		{
@@ -114,9 +114,9 @@ func TestParse_FieldFilters(t *testing.T) {
 			wantSemantic: "",
 		},
 		{
-			name:  "unrecognized prefix treated as bare word",
-			input: "unknown:value",
-			wantFilters: map[string]string{},
+			name:         "unrecognized prefix treated as bare word",
+			input:        "unknown:value",
+			wantFilters:  map[string]string{},
 			wantSemantic: "unknown:value",
 		},
 	}

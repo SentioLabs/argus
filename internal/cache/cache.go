@@ -1,3 +1,5 @@
+// Package cache stores fetched vulnerabilities in a local SQLite database
+// so repeated searches do not hit the providers again.
 package cache
 
 import (
@@ -14,6 +16,7 @@ import (
 	"github.com/sentiolabs/argus/internal/provider"
 )
 
+// DefaultTTL is how long a cached fetch stays valid before search refreshes it.
 const DefaultTTL = 24 * time.Hour
 
 // Manager handles cache lifecycle for a project.
@@ -34,7 +37,7 @@ func NewManager(ttl time.Duration, verbose bool) (*Manager, error) {
 
 	dbPath := DBPath()
 	// Ensure parent directory exists
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
@@ -71,7 +74,7 @@ func (m *Manager) Close() error {
 
 // IsValid checks if the current project's cache exists and is within TTL.
 func (m *Manager) IsValid() bool {
-	fetchedAt, err := m.store.GetMeta(m.projectKey, "fetched_at")
+	fetchedAt, err := m.store.GetMeta(context.Background(), m.projectKey, "fetched_at")
 	if err != nil || fetchedAt == "" {
 		return false
 	}
@@ -156,8 +159,8 @@ func (m *Manager) Refresh(ctx context.Context, cfg *config.Config, providerScope
 // enabledProviders returns the list of provider names to fetch from.
 func enabledProviders(cfg *config.Config, scope string) []string {
 	var names []string
-	for name, p := range cfg.Providers {
-		if !p.Enabled {
+	for name := range cfg.Providers {
+		if !cfg.Providers[name].Enabled {
 			continue
 		}
 		if scope == "all" || scope == name {

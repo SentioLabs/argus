@@ -40,11 +40,31 @@ go install github.com/sentiolabs/argus@latest
 
 ### Build from source
 
+Tool versions are pinned in `mise.toml`. Install [mise](https://mise.jdx.dev) once, then:
+
 ```bash
 git clone https://github.com/sentiolabs/argus.git
 cd argus
-make build
+mise install
+task build
+./bin/argus version
 ```
+
+Run `task` with no arguments to list every task, including `test`, `lint`, and `ci`.
+
+### Updating
+
+A binary installed with the quick-install script or built from a release can update itself:
+
+```bash
+argus self update          # install the newest release on your channel
+argus self update --check  # report whether an update is available, install nothing
+argus self channel         # show the current channel (stable by default)
+argus self channel rc      # follow release candidates
+argus self channel nightly # follow nightly builds from main
+```
+
+The update downloads the release archive for your OS and architecture, verifies it against the release's `checksums.txt`, and replaces the running binary in place. Binaries managed by Homebrew, Nix, or a system package manager are refused with a hint to use that manager's upgrade command instead.
 
 ### Docker
 
