@@ -1,0 +1,8 @@
+# Toolchain pins for argus. `mise install` provisions everything the
+# Taskfile invokes. `go` must match the go directive in go.mod;
+# `task check:versions` asserts this.
+[tools]
+go            = "1.27.1"
+task          = "3"
+golangci-lint = "2.13.2"
+goreleaser    = "2.17.1"

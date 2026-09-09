@@ -1,5 +1,7 @@
 # Compiled binary
 argus
+bin/
+dist/
 
 # Environment files (contain secrets)
 .env
