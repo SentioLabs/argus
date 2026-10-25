@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.1](https://github.com/SentioLabs/argus/compare/v0.7.0...v0.7.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* **install:** compare digests instead of sha256sum -c ([9182afe](https://github.com/SentioLabs/argus/commit/9182afee7fb0c1446e232cc8674a062dee8a4f2e))
+* **install:** compare digests instead of sha256sum -c ([2b2b155](https://github.com/SentioLabs/argus/commit/2b2b15504c6af5b1286cdc896070e32024beddcf))
+
 ## [0.7.0](https://github.com/SentioLabs/argus/compare/v0.6.0...v0.7.0) (2026-09-09)
 
 
