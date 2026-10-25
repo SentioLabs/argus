@@ -64,11 +64,15 @@ echo "downloading ${asset}"
 curl -fsSL -o "${tmp}/${asset}" "${base}/${asset}" || die "no asset ${asset} in release ${TAG}"
 curl -fsSL -o "${tmp}/checksums.txt" "${base}/checksums.txt" || die "release ${TAG} has no checksums.txt"
 
+# Compare digests by hand: macOS 15 ships a BSD sha256sum without GNU's --quiet.
+want=$(grep "  ${asset}\$" "${tmp}/checksums.txt" | cut -d' ' -f1)
+[ -n "$want" ] || die "no checksum for ${asset} in checksums.txt"
 if command -v sha256sum >/dev/null; then
-    (cd "$tmp" && grep "  ${asset}\$" checksums.txt | sha256sum -c --quiet) || die "checksum mismatch for ${asset}"
+    got=$(sha256sum "${tmp}/${asset}" | cut -d' ' -f1)
 else
-    (cd "$tmp" && grep "  ${asset}\$" checksums.txt | shasum -a 256 -c --quiet) || die "checksum mismatch for ${asset}"
+    got=$(shasum -a 256 "${tmp}/${asset}" | cut -d' ' -f1)
 fi
+[ "$want" = "$got" ] || die "checksum mismatch for ${asset}"
 
 tar -xzf "${tmp}/${asset}" -C "$tmp" argus
 
