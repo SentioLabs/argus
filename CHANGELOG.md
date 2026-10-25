@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.0](https://github.com/SentioLabs/argus/compare/v0.6.0...v0.7.0) (2026-09-09)
+
+
+### Features
+
+* add self update and adopt Go 1.27, mise, Taskfile ([b693d5b](https://github.com/SentioLabs/argus/commit/b693d5bd502cfe18c4908e3c06fc038820da8363))
+* **cli:** add argus self update and self channel ([948df3f](https://github.com/SentioLabs/argus/commit/948df3f6af1dd5f370718a8abb23cffc7a52353e))
+* **update:** add file-backed channel store on Go 1.27.1 ([eddc17c](https://github.com/SentioLabs/argus/commit/eddc17cff8f098fcd3965b758532f11143dc590d))
+
 ## [0.6.0](https://github.com/SentioLabs/argus/compare/v0.5.0...v0.6.0) (2026-04-08)
 
 
