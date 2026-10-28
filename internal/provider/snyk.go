@@ -245,7 +245,11 @@ func (p *SnykProvider) getProjects(ctx context.Context) ([]snykProject, error) {
 		}
 	}
 
-	// Apply project filtering
+	return p.filterProjects(allProjects), nil
+}
+
+// filterProjects applies project_excludes, project_includes, and the runtime repo scope.
+func (p *SnykProvider) filterProjects(allProjects []snykProject) []snykProject {
 	filteredProjects := make([]snykProject, 0, len(allProjects))
 	for i := range allProjects {
 		project := &allProjects[i]
@@ -272,7 +276,7 @@ func (p *SnykProvider) getProjects(ctx context.Context) ([]snykProject, error) {
 		slog.Info("filtered projects", "total", len(allProjects), "matched", len(filteredProjects))
 	}
 
-	return filteredProjects, nil
+	return filteredProjects
 }
 
 // matchesInclude checks if a project matches any of the project_includes entries

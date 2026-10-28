@@ -42,6 +42,20 @@ func TestApplyRepoScope(t *testing.T) {
 	assert.Empty(t, applyRepoScope("BACtrack/bacstack", names, identity))
 }
 
+func TestSnykFilterProjectsAppliesScopeAfterExcludes(t *testing.T) {
+	p := &SnykProvider{
+		projectExcludes: []string{"BACtrack/bacstack-api"},
+		repoScope:       "BACtrack/bacstack-api*",
+	}
+	projects := []snykProject{
+		{ID: "1", Name: "BACtrack/bacstack-api"},
+		{ID: "2", Name: "BACtrack/bacstack-api:go.mod"},
+		{ID: "3", Name: "BACtrack/view-api:Dockerfile"},
+	}
+
+	assert.Equal(t, []snykProject{{ID: "2", Name: "BACtrack/bacstack-api:go.mod"}}, p.filterProjects(projects))
+}
+
 func TestSuggestRepos(t *testing.T) {
 	names := []string{
 		"BACtrack/bacstack-api:go.mod",
