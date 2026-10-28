@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.0](https://github.com/SentioLabs/argus/compare/v0.8.0...v0.9.0) (2026-10-28)
+
+
+### Features
+
+* **verify:** add --repo flag to filter by repository ([46a8a69](https://github.com/SentioLabs/argus/commit/46a8a69699085c000e504cd185219f9a286b5441))
+* **verify:** add --repo flag to filter by repository ([be31d8c](https://github.com/SentioLabs/argus/commit/be31d8cdf1ecfb59c19e9155aaa212049452ece7))
+
+
+### Refactoring
+
+* **snyk:** extract project filtering from getProjects ([c7ab518](https://github.com/SentioLabs/argus/commit/c7ab5181aa1814782f76292e64faaf826321d11f))
+
 ## [0.8.0](https://github.com/SentioLabs/argus/compare/v0.7.1...v0.8.0) (2026-10-28)
 
 
