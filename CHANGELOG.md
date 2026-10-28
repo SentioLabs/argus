@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/SentioLabs/argus/compare/v0.7.1...v0.8.0) (2026-10-28)
+
+
+### Features
+
+* **config:** look up config in XDG config dir ([9f0e243](https://github.com/SentioLabs/argus/commit/9f0e243b3efee057d1e050613991d5d57db436da))
+* **config:** look up config in XDG config dir ([18d5e64](https://github.com/SentioLabs/argus/commit/18d5e641806c85c8159292fc425f6ce5b9e3fd01))
+
 ## [0.7.1](https://github.com/SentioLabs/argus/compare/v0.7.0...v0.7.1) (2026-10-25)
 
 
