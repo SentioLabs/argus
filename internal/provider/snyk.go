@@ -33,6 +33,7 @@ type SnykProvider struct {
 	apiVersion       string
 	projectIncludes  []config.RepoInclude
 	projectExcludes  []string
+	repoScope        string
 	severityMappings map[string]string
 	verbose          bool
 }
@@ -126,6 +127,7 @@ func NewSnykProvider(token string, fullCfg *config.Config, providerCfg config.Pr
 		apiVersion:       apiVersion,
 		projectIncludes:  providerCfg.ProjectIncludes,
 		projectExcludes:  providerCfg.ProjectExcludes,
+		repoScope:        providerCfg.RepoScope,
 		severityMappings: severityMappings,
 		verbose:          verbose,
 	}, nil
@@ -263,7 +265,10 @@ func (p *SnykProvider) getProjects(ctx context.Context) ([]snykProject, error) {
 		filteredProjects = append(filteredProjects, *project)
 	}
 
-	if p.verbose && (len(p.projectIncludes) > 0 || len(p.projectExcludes) > 0) {
+	// Narrow to the runtime repo scope (verify --repo)
+	filteredProjects = applyRepoScope(p.repoScope, filteredProjects, func(proj snykProject) string { return proj.Name })
+
+	if p.verbose && (len(p.projectIncludes) > 0 || len(p.projectExcludes) > 0 || p.repoScope != "") {
 		slog.Info("filtered projects", "total", len(allProjects), "matched", len(filteredProjects))
 	}
 

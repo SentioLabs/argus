@@ -12,7 +12,10 @@ import (
 	"github.com/sentiolabs/argus/internal/provider"
 )
 
-var providerFlag string
+var (
+	providerFlag string
+	repoFlag     string
+)
 
 var verifyCmd = &cobra.Command{
 	Use:   "verify",
@@ -31,6 +34,7 @@ func init() {
 
 	verifyCmd.Flags().StringVar(&providerFlag, "provider", "", "provider to verify (required, e.g., 'github' or 'snyk')")
 	_ = verifyCmd.MarkFlagRequired("provider")
+	verifyCmd.Flags().StringVar(&repoFlag, "repo", "", "only show findings for this repo or glob (e.g., 'myorg/api' or 'myorg/api-*')")
 }
 
 func runVerify(cmd *cobra.Command, args []string) error {
@@ -49,6 +53,12 @@ func runVerify(cmd *cobra.Command, args []string) error {
 
 	if !providerCfg.Enabled {
 		slog.Warn("provider is disabled in config", "provider", providerFlag)
+	}
+
+	// Narrow fetching to one repo. Configured includes/excludes and per-repo overrides still apply.
+	if repoFlag != "" {
+		providerCfg.RepoScope = repoFlag
+		cfg.Providers[providerFlag] = providerCfg
 	}
 
 	// Initialize provider

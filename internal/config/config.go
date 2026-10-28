@@ -95,6 +95,10 @@ type ProviderConfig struct {
 	ProjectExcludes []string      `mapstructure:"project_excludes"` // Projects/patterns to exclude
 	APIVersion      string        `mapstructure:"api_version"`      // Snyk REST API version (e.g., "2024-10-15")
 
+	// RepoScope narrows fetching to a single repo (or glob) on top of the
+	// include/exclude rules. Set at runtime by `verify --repo`, not from config.
+	RepoScope string `mapstructure:"-"`
+
 	// Overrides for defaults
 	Jira    *JiraConfig    `mapstructure:"jira"`
 	Filters *FiltersConfig `mapstructure:"filters"`
