@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/sentiolabs/selfupdate-go"
+
+	"github.com/sentiolabs/argus/internal/config"
 )
 
 // ErrNoPath is returned by SetChannel when Path is empty.
@@ -25,13 +27,13 @@ const (
 // updater treats as stable. Writes need a Path.
 type FileStore struct{ Path string }
 
-// DefaultPath returns <os.UserConfigDir()>/argus/update-channel.
+// DefaultPath returns <config.Dir()>/update-channel.
 func DefaultPath() (string, error) {
-	dir, err := os.UserConfigDir()
+	dir, err := config.Dir()
 	if err != nil {
-		return "", fmt.Errorf("resolve user config dir: %w", err)
+		return "", fmt.Errorf("resolve config dir: %w", err)
 	}
-	return filepath.Join(dir, "argus", "update-channel"), nil
+	return filepath.Join(dir, "update-channel"), nil
 }
 
 // Channel reads Path. An empty Path or a missing file yields "" and a nil
@@ -40,7 +42,7 @@ func (s FileStore) Channel() (selfupdate.Channel, error) {
 	if s.Path == "" {
 		return "", nil
 	}
-	data, err := os.ReadFile(s.Path) //nolint:gosec // Path comes from os.UserConfigDir, not user input
+	data, err := os.ReadFile(s.Path) //nolint:gosec // Path comes from config.Dir, not user input
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", nil
 	}

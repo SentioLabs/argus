@@ -77,3 +77,13 @@ func TestDefaultPath(t *testing.T) {
 	assert.True(t, strings.HasSuffix(p, filepath.Join("argus", "update-channel")), p)
 	assert.True(t, filepath.IsAbs(p), p)
 }
+
+func TestDefaultPath_DotConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	p, err := update.DefaultPath()
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(home, ".config", "argus", "update-channel"), p)
+}

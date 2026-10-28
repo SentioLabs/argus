@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -13,6 +14,8 @@ import (
 
 //go:embed configs/example.yaml
 var exampleConfig string
+
+var initGlobal bool
 
 var configCmd = &cobra.Command{
 	Use:   "config",
@@ -35,10 +38,23 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 	configCmd.AddCommand(configInitCmd)
 	configCmd.AddCommand(configValidateCmd)
+
+	configInitCmd.Flags().BoolVar(&initGlobal, "global", false,
+		"write to the global config (~/.config/argus/config.yaml) instead of ./.argus.yaml")
 }
 
 func runConfigInit(cmd *cobra.Command, args []string) error {
-	filename := ".argus.yaml"
+	filename := config.LocalFile
+	if initGlobal {
+		global, err := config.File()
+		if err != nil {
+			return fmt.Errorf("failed to resolve global config path: %w", err)
+		}
+		filename = global
+		if err := os.MkdirAll(filepath.Dir(filename), 0o700); err != nil {
+			return fmt.Errorf("failed to create config dir: %w", err)
+		}
+	}
 
 	// Check if file already exists
 	if _, err := os.Stat(filename); err == nil {
