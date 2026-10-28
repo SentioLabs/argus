@@ -7,6 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/sentiolabs/argus/internal/config"
 )
 
 var (
@@ -32,7 +34,7 @@ func Execute() error {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.argus.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./.argus.yaml, then ~/.config/argus/config.yaml)")
 	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "preview changes without creating Jira tickets")
 	rootCmd.PersistentFlags().StringVar(&outputFormat, "output", "table", "output format: json or table")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
@@ -45,17 +47,18 @@ func initConfig() {
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
-	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile)
-	} else {
-		home, err := os.UserHomeDir()
+	if cfgFile == "" {
+		found, err := config.FindConfigFile()
 		cobra.CheckErr(err)
-
-		viper.AddConfigPath(home)
-		viper.AddConfigPath(".")
-		viper.SetConfigType("yaml")
-		viper.SetConfigName(".argus")
+		cfgFile = found
 	}
+
+	if cfgFile == "" {
+		// No config file anywhere: run on environment variables alone.
+		return
+	}
+
+	viper.SetConfigFile(cfgFile)
 
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())

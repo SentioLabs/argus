@@ -167,7 +167,14 @@ ARGUS_JIRA_TOKEN=xxxxxxxxxxxxxxxx
 
 ### Configuration File
 
-Create a `.argus.yaml` file in your working directory:
+Argus uses the first config file it finds:
+
+1. `./.argus.yaml` in the working directory (per-project)
+2. `$XDG_CONFIG_HOME/argus/config.yaml`, defaulting to `~/.config/argus/config.yaml` on Linux and macOS (global)
+
+Pass `--config <path>` to use a specific file. Run `argus config init` to write an example `./.argus.yaml`, or `argus config init --global` to write the global file.
+
+Example config:
 
 ```yaml
 defaults:
