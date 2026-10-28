@@ -7,7 +7,7 @@ require (
 	github.com/google/go-github/v57 v57.0.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/olekukonko/tablewriter v1.1.2
-	github.com/sentiolabs/selfupdate-go v0.2.0-rc.1
+	github.com/sentiolabs/selfupdate-go v0.2.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
