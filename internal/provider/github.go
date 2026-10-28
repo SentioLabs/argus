@@ -21,6 +21,7 @@ type GitHubProvider struct {
 	orgs             []string
 	repoIncludes     []config.RepoInclude
 	repoExcludes     []string
+	repoScope        string
 	severityMappings map[string]string
 	verbose          bool
 }
@@ -49,6 +50,7 @@ func NewGitHubProvider(token string, fullCfg *config.Config, providerCfg config.
 		orgs:             providerCfg.Orgs,
 		repoIncludes:     providerCfg.RepoIncludes,
 		repoExcludes:     providerCfg.RepoExcludes,
+		repoScope:        providerCfg.RepoScope,
 		severityMappings: severityMappings,
 		verbose:          verbose,
 	}, nil
@@ -68,6 +70,9 @@ func (p *GitHubProvider) FetchVulnerabilities(ctx context.Context) ([]Vulnerabil
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repositories: %w", err)
 	}
+
+	// Narrow to the runtime repo scope (verify --repo)
+	repos = applyRepoScope(p.repoScope, repos, func(repo string) string { return repo })
 
 	if p.verbose {
 		slog.Info("found GitHub repositories", "count", len(repos))
